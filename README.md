@@ -7,6 +7,7 @@ Fonctionnels sous tous les OS (testé sous Linux, Android & Windows).
 Le code est généré par IA (GPT4), des adapations sont faites à la main selon les besoins.
 
 La première application : registre-maintenance à pour but d'archiver des entrées et des documents. Le fichier config.txt sert à ajouter les données site et nature. Sous windows, le fichier .bat sert à lancer l'application.
+
 La seconde application : archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures.
 
 Les dépendances nécessaires pour exécuter le code sont :
