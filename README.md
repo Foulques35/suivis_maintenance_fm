@@ -2,15 +2,16 @@ Projet Archiviste
 
 Projet personnel pour la gestion de données et l'archivage de documents.
 Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments.
-
-La première application : Projet-A (nom à changer) sert de registre.
-La seconde applciation : Archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures.
+Fonctionnels sous tous les OS (testé sous Linux, Android & Windows).
 
 Le code est généré par IA (GPT4), des adapations sont faites à la main selon les besoins.
 
+La première application : registre-maintenance à pour but d'archiver des entrées et des documents. Le fichier config.txt sert à ajouter les données site et nature. Sous windows, le fichier .bat sert à lancer l'application.
+La seconde application : archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures.
+
 Les dépendances nécessaires pour exécuter le code sont :
 
-Python 3.12
+Python 3.12 : disponible dans le store Microsoft ou l'application Pydroid 3 (par exemple) pour Android.
 tkinter : La bibliothèque pour créer des interfaces graphiques en Python.
 tkcalendar : Un module basé sur tkinter qui fournit des widgets de calendrier et de sélection de dates.
 sqlite3 : Une bibliothèque intégrée dans Python pour interagir avec une base de données SQLite.
