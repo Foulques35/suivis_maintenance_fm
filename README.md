@@ -12,17 +12,27 @@ La seconde application : archiviste sert à manipuler des fichiers pour les reno
 
 Les dépendances nécessaires pour exécuter le code sont :
 
-Python 3.12 : disponible dans le store Microsoft ou l'application Pydroid 3 (par exemple) pour Android.
-tkinter : La bibliothèque pour créer des interfaces graphiques en Python.
-tkcalendar : Un module basé sur tkinter qui fournit des widgets de calendrier et de sélection de dates.
-sqlite3 : Une bibliothèque intégrée dans Python pour interagir avec une base de données SQLite.
-locale : Un module intégré pour gérer la configuration de la langue et du format de date.
-datetime : Une bibliothèque intégrée pour gérer les dates et les heures.
-os : Un module intégré pour les interactions avec le système de fichiers.
-webbrowser : Un module intégré permettant d'ouvrir des URLs dans un navigateur web.
-tkinter.ttk : La sous-bibliothèque ttk de tkinter pour des widgets à l'apparence plus moderne.
-filedialog (partie de tkinter) : Permet d'ouvrir des boîtes de dialogue pour la sélection de fichiers.
-messagebox (partie de tkinter) : Utilisé pour afficher des boîtes de message (erreurs, avertissements, succès, etc.).
+- Python 3.12 : disponible dans le store Microsoft ou l'application Pydroid 3 (par exemple) pour Android.
+
+- tkinter : La bibliothèque pour créer des interfaces graphiques en Python.
+
+- tkcalendar : Un module basé sur tkinter qui fournit des widgets de calendrier et de sélection de dates.
+
+- sqlite3 : Une bibliothèque intégrée dans Python pour interagir avec une base de données SQLite.
+
+- locale : Un module intégré pour gérer la configuration de la langue et du format de date.
+
+- datetime : Une bibliothèque intégrée pour gérer les dates et les heures.
+
+- os : Un module intégré pour les interactions avec le système de fichiers.
+
+- webbrowser : Un module intégré permettant d'ouvrir des URLs dans un navigateur web.
+
+- tkinter.ttk : La sous-bibliothèque ttk de tkinter pour des widgets à l'apparence plus moderne.
+
+- filedialog (partie de tkinter) : Permet d'ouvrir des boîtes de dialogue pour la sélection de fichiers.
+
+- messagebox (partie de tkinter) : Utilisé pour afficher des boîtes de message (erreurs, avertissements, succès, etc.).
 
 Installation des dépendances :
 Pour les bibliothèques intégrées comme sqlite3, locale, datetime, os, et webbrowser, il n'y a pas besoin d'installation supplémentaire. 
