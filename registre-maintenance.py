@@ -33,7 +33,6 @@ def load_config():
                     config[current_section].append(line)
     return config
 
-
 def init_db():
     """Initialiser la base de données et créer la table si elle n'existe pas"""
     conn = sqlite3.connect(DB_PATH)
@@ -55,12 +54,10 @@ def init_db():
     conn.commit()
     conn.close()
 
-
 def create_attachments_dir():
     """Créer le dossier des pièces jointes si nécessaire"""
     if not os.path.exists(ATTACHMENTS_DIR):
         os.makedirs(ATTACHMENTS_DIR)
-
 
 class MainApp(tk.Tk):
     def __init__(self):
@@ -86,35 +83,43 @@ class MainApp(tk.Tk):
         # Volet de gauche
         self.left_frame = ttk.Frame(main_frame, width=900)
         main_frame.add(self.left_frame)
-        self.left_frame.pack_propagate(False)  # Empêche le volet de se redimensionner automatiquement
+        self.left_frame.pack_propagate(False)
 
         # Volet de droite
         self.right_frame = ttk.Frame(main_frame, width=200)
         main_frame.add(self.right_frame)
-        self.right_frame.pack_propagate(False)  # Empêche le volet de se redimensionner automatiquement
+        self.right_frame.pack_propagate(False)
 
-        # Bouton "Vue agenda"
-        ttk.Button(self.left_frame, text="Vue agenda", command=self.open_calendar_view).pack(anchor=tk.W, padx=10, pady=10)
+        # Disposition des boutons "Vue agenda" et "Exporter"
+        button_frame = ttk.Frame(self.left_frame)
+        button_frame.pack(anchor=tk.W, padx=10, pady=10)
+        ttk.Button(button_frame, text="Vue agenda", command=self.open_calendar_view).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Exporter", command=self.export_data).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Export détaillé", command=self.export_detailed_data).pack(side=tk.LEFT, padx=5)
+
+        # Barre de recherche : nom, description, terminé
+        search_frame = ttk.Frame(self.left_frame)
+        search_frame.pack(fill=tk.X, padx=10, pady=10)
 
         # Barre de recherche pour Nom
-        ttk.Label(self.left_frame, text="Rechercher un événement").pack(anchor=tk.W)
+        ttk.Label(search_frame, text="Nom").pack(side=tk.LEFT, padx=5)
         self.search_var = tk.StringVar()
-        search_entry = ttk.Entry(self.left_frame, textvariable=self.search_var)
-        search_entry.pack(fill=tk.X)
+        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
+        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_entry.bind("<KeyRelease>", self.search_event)
 
         # Barre de recherche pour Description
-        ttk.Label(self.left_frame, text="Rechercher dans Description").pack(anchor=tk.W)
+        ttk.Label(search_frame, text="Description").pack(side=tk.LEFT, padx=5)
         self.search_desc_var = tk.StringVar()
-        search_desc_entry = ttk.Entry(self.left_frame, textvariable=self.search_desc_var)
-        search_desc_entry.pack(fill=tk.X)
+        search_desc_entry = ttk.Entry(search_frame, textvariable=self.search_desc_var)
+        search_desc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_desc_entry.bind("<KeyRelease>", self.search_event)
 
         # Barre de recherche pour Terminé
-        ttk.Label(self.left_frame, text="Rechercher par Terminé (Oui/Non)").pack(anchor=tk.W)
+        ttk.Label(search_frame, text="Terminé").pack(side=tk.LEFT, padx=5)
         self.search_finished_var = tk.StringVar()
-        search_finished_entry = ttk.Entry(self.left_frame, textvariable=self.search_finished_var)
-        search_finished_entry.pack(fill=tk.X)
+        search_finished_entry = ttk.Entry(search_frame, textvariable=self.search_finished_var)
+        search_finished_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         search_finished_entry.bind("<KeyRelease>", self.search_event)
 
         # Filtre des dates
@@ -125,18 +130,23 @@ class MainApp(tk.Tk):
             "Pas de filtre", "Aujourd'hui", "Cette semaine", "Semaine prochaine", "Ce mois-ci", "Mois prochain",
             "Mois précédent", "Cette année", "Année dernière"
         ]
-        self.date_filter_combobox.current(0)  # Par défaut, "Pas de filtre"
+        self.date_filter_combobox.current(0)
         self.date_filter_combobox.pack(fill=tk.X)
         self.date_filter_combobox.bind("<Double-Button-1>", lambda e: self.date_filter_combobox.event_generate('<Down>'))
         self.date_filter_combobox.bind("<<ComboboxSelected>>", self.apply_date_filter)
 
         # Liste des événements
-        self.event_list = ttk.Treeview(self.left_frame, columns=("date", "end_date", "site", "nature", "name", "finished", "time_spent", "attachments"), show="headings")
+        self.event_list = ttk.Treeview(self.left_frame, columns=(
+            "date", "end_date", "site", "nature", "name", "description", "finished", "time_spent", "attachments"),
+            show="headings")
+        
+        # Configuration des colonnes
         self.event_list.heading("date", text="Date", command=lambda: self.sort_column("date", False))
         self.event_list.heading("end_date", text="Date de Fin", command=lambda: self.sort_column("end_date", False))
         self.event_list.heading("site", text="Site", command=lambda: self.sort_column("site", False))
         self.event_list.heading("nature", text="Nature", command=lambda: self.sort_column("nature", False))
         self.event_list.heading("name", text="Événement", command=lambda: self.sort_column("name", False))
+        self.event_list.heading("description", text="Description", command=lambda: self.sort_column("description", False))
         self.event_list.heading("finished", text="Terminé", command=lambda: self.sort_column("finished", False))
         self.event_list.heading("time_spent", text="Temps Passé", command=lambda: self.sort_column("time_spent", False))
         self.event_list.heading("attachments", text="Pièces Jointes", command=lambda: self.sort_column("attachments", False))
@@ -183,11 +193,14 @@ class MainApp(tk.Tk):
             events = self.get_events_for_day(selected_date)
             if events:
                 for event in events:
+                    ttk.Label(right_event_frame, text=f"Site: {event[2]}").pack(anchor=tk.W)
                     ttk.Label(right_event_frame, text=f"Événement: {event[0]}").pack(anchor=tk.W)
                     ttk.Label(right_event_frame, text=f"Description: {event[1]}").pack(anchor=tk.W)
-                    ttk.Label(right_event_frame, text=f"Site: {event[2]}").pack(anchor=tk.W)
                     ttk.Label(right_event_frame, text=f"Nature: {event[3]}").pack(anchor=tk.W)
                     ttk.Label(right_event_frame, text=f"Temps passé: {event[4]} heures").pack(anchor=tk.W)
+                    # Ajouter la ligne "Terminé"
+                    termine = "Oui" if event[5] == 1 else "Non"
+                    ttk.Label(right_event_frame, text=f"Terminé: {termine}").pack(anchor=tk.W)
                     ttk.Separator(right_event_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
             else:
                 ttk.Label(right_event_frame, text="Aucun événement pour ce jour").pack(pady=20)
@@ -222,11 +235,37 @@ class MainApp(tk.Tk):
         """Récupère les événements pour un jour donné"""
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT name, description, site, nature, time_spent FROM events WHERE date <= ? AND (end_date IS NULL OR end_date >= ?)",
+        cursor.execute("SELECT name, description, site, nature, time_spent, finished FROM events WHERE date <= ? AND (end_date IS NULL OR end_date >= ?)",
                        (selected_date, selected_date))
         events = cursor.fetchall()
         conn.close()
         return events
+
+    def export_data(self):
+        """Exporter les données filtrées dans un fichier texte"""
+        with open("Export_registre.txt", "w", encoding="utf-8") as f:
+            for row_id in self.event_list.get_children():
+                row_data = self.event_list.item(row_id, "values")
+                f.write(", ".join(row_data) + "\n")
+        messagebox.showinfo("Exportation réussie", "Les données ont été exportées dans Export_registre.txt")
+
+    def export_detailed_data(self):
+        """Exporter les données filtrées avec un format détaillé"""
+        with open("Export_registre_detaillé.txt", "w", encoding="utf-8") as f:
+            for row_id in self.event_list.get_children():
+                row_data = self.event_list.item(row_id, "values")
+                description = self.get_event_description(row_data[0], row_data[4])
+                f.write(f"----\nDate: {row_data[0]}\nSite: {row_data[2]}\nNature: {row_data[3]}\nNom de l'événement: {row_data[4]}\nDescription: {row_data[5]}\nTemps passé: {row_data[7]} heures\nTerminé: {row_data[6]}\n----\n\n")
+        messagebox.showinfo("Exportation réussie", "Les données détaillées ont été exportées dans Export_registre_detaillé.txt")
+
+    def get_event_description(self, date, name):
+        """Récupérer la description de l'événement en fonction de la date et du nom"""
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT description FROM events WHERE date = ? AND name = ?", (date, name))
+        description = cursor.fetchone()
+        conn.close()
+        return description[0] if description else "Aucune description"
 
     def create_right_panel(self):
         """Créer les champs dans le volet droit pour ajouter/modifier un événement"""
@@ -287,7 +326,7 @@ class MainApp(tk.Tk):
 
         # Description riche
         ttk.Label(self.right_frame, text="Description").pack(anchor=tk.W)
-        self.description_text = tk.Text(self.right_frame, height=5)
+        self.description_text = tk.Text(self.right_frame, height=10)
         self.description_text.pack(fill=tk.X)
 
         # Champs Terminé et Temps passé (après Description)
@@ -439,15 +478,15 @@ class MainApp(tk.Tk):
 
     def reset_form(self):
         """Réinitialiser les champs du formulaire après enregistrement"""
-        self.date_entry.set_date(None)  # Retirer la date
-        self.end_date_entry.set_date(None)  # Retirer la date
+        self.date_entry.set_date(None)
+        self.end_date_entry.set_date(None)
         self.site_combobox.set("")
         self.nature_combobox.set("")
         self.name_entry.delete(0, tk.END)
         self.time_spent_entry.delete(0, tk.END)
         self.description_text.delete("1.0", tk.END)
         self.attachment_listbox.delete(0, tk.END)
-        self.attachments = []  # Réinitialiser les pièces jointes
+        self.attachments = []  
         self.finished_var.set(0)
         self.selected_event_id = None
 
@@ -458,27 +497,25 @@ class MainApp(tk.Tk):
             # Récupérer les valeurs de l'événement sélectionné dans le Treeview
             event = self.event_list.item(selected_item, 'values')
 
-            # Extraire les informations depuis le Treeview
-            event_date_str = event[0].split(" - ")[0] if event[0] else None  # On prend seulement la date sans le jour de la semaine
+            event_date_str = event[0].split(" - ")[0] if event[0] else None
             end_date_str = event[1].split(" - ")[0] if event[1] else None
             event_site = event[2]
             event_nature = event[3]
             event_name = event[4]
-            event_finished = event[5]
-            event_time_spent = event[6]
-            event_attachments = event[7].split(",") if event[7] else []
+            event_description = event[5]
+            event_finished = event[6]
+            event_time_spent = event[7]
+            event_attachments = event[8].split(",") if event[8] else []
 
-            # Connexion à la base de données pour récupérer la description de l'événement
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
-            cursor.execute("SELECT id, description FROM events WHERE date = ? AND name = ?", (event_date_str, event_name))
+            cursor.execute("SELECT id FROM events WHERE date = ? AND name = ?", (event_date_str, event_name))
             selected_event = cursor.fetchone()
             conn.close()
 
             if selected_event:
                 self.selected_event_id = selected_event[0]
 
-                # Remplir les champs du formulaire du volet de droite
                 self.date_entry.set_date(event_date_str if event_date_str else None)
                 self.end_date_entry.set_date(end_date_str if end_date_str else None)
                 self.site_combobox.set(event_site)
@@ -488,9 +525,9 @@ class MainApp(tk.Tk):
                 self.time_spent_entry.delete(0, tk.END)
                 self.time_spent_entry.insert(0, event_time_spent)
                 self.description_text.delete("1.0", tk.END)
-                self.description_text.insert(tk.END, selected_event[1])
+                self.description_text.insert(tk.END, event_description)
                 self.attachment_listbox.delete(0, tk.END)
-                self.attachments = event_attachments  # Recharger les pièces jointes dans la liste
+                self.attachments = event_attachments
                 for attachment in event_attachments:
                     self.attachment_listbox.insert(tk.END, attachment)
                 self.finished_var.set(1 if event_finished == "Oui" else 0)
@@ -501,27 +538,23 @@ class MainApp(tk.Tk):
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute("SELECT id, date, end_date, site, nature, name, time_spent, attachments, finished FROM events ORDER BY date ASC")  # Tri par défaut du plus ancien au plus récent
+        cursor.execute("SELECT id, date, end_date, site, nature, name, description, time_spent, attachments, finished FROM events ORDER BY date ASC")
         events = cursor.fetchall()
 
-        total_time_spent = 0  # Pour calculer la somme du temps passé
+        total_time_spent = 0
 
         for event in events:
-            finished_text = "Oui" if event[8] == 1 else "Non"
+            finished_text = "Oui" if event[9] == 1 else "Non"
             event_date = self.format_date_with_day(event[1]) if event[1] else ""
             end_date = self.format_date_with_day(event[2]) if event[2] else ""
 
-            # Ajouter les événements dans Treeview, avec surlignage des week-ends
             row_tag = "weekend" if self.is_weekend(event[1]) else ""
-            self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], finished_text, event[6], event[7]), tags=(row_tag,))
+            self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            # Ajouter au total du temps passé
-            total_time_spent += event[6] if event[6] else 0
+            total_time_spent += event[7] if event[7] else 0
 
-        # Mettre à jour l'étiquette avec la somme du temps passé
         self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
-
         conn.close()
 
     def search_event(self, event):
@@ -533,7 +566,7 @@ class MainApp(tk.Tk):
         self.event_list.delete(*self.event_list.get_children())
 
         conn = sqlite3.connect(DB_PATH)
-        query = "SELECT id, date, end_date, site, nature, name, time_spent, attachments, finished, description FROM events WHERE LOWER(name) LIKE ? AND LOWER(description) LIKE ?"
+        query = "SELECT id, date, end_date, site, nature, name, description, time_spent, attachments, finished FROM events WHERE LOWER(name) LIKE ? AND LOWER(description) LIKE ?"
         params = ['%' + search_text + '%', '%' + search_desc_text + '%']
 
         if search_finished_text in ["oui", "non"]:
@@ -545,22 +578,19 @@ class MainApp(tk.Tk):
         cursor.execute(query, params)
         events = cursor.fetchall()
 
-        total_time_spent = 0  # Pour calculer la somme du temps passé
+        total_time_spent = 0
 
         for event in events:
-            finished_text = "Oui" if event[8] == 1 else "Non"
+            finished_text = "Oui" if event[9] == 1 else "Non"
             event_date = self.format_date_with_day(event[1]) if event[1] else ""
             end_date = self.format_date_with_day(event[2]) if event[2] else ""
             row_tag = "weekend" if self.is_weekend(event[1]) else ""
-            self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], finished_text, event[6], event[7]), tags=(row_tag,))
+            self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            # Ajouter au total du temps passé
-            total_time_spent += event[6] if event[6] else 0
+            total_time_spent += event[7] if event[7] else 0
 
-        # Mettre à jour l'étiquette avec la somme du temps passé
         self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
-
         conn.close()
 
     def apply_date_filter(self, event=None):
@@ -593,7 +623,7 @@ class MainApp(tk.Tk):
             start_date = today.replace(year=today.year - 1, month=1, day=1)
             end_date = today.replace(year=today.year - 1, month=12, day=31)
         else:
-            start_date = end_date = None  # Pas de filtre
+            start_date = end_date = None
 
         self.load_filtered_events(start_date, end_date)
 
@@ -602,7 +632,7 @@ class MainApp(tk.Tk):
         self.event_list.delete(*self.event_list.get_children())
 
         conn = sqlite3.connect(DB_PATH)
-        query = "SELECT id, date, end_date, site, nature, name, time_spent, attachments, finished FROM events"
+        query = "SELECT id, date, end_date, site, nature, name, description, time_spent, attachments, finished FROM events"
         if start_date and end_date:
             query += " WHERE date BETWEEN ? AND ?"
             cursor = conn.cursor()
@@ -612,22 +642,19 @@ class MainApp(tk.Tk):
             cursor.execute(query)
         events = cursor.fetchall()
 
-        total_time_spent = 0  # Pour calculer la somme du temps passé
+        total_time_spent = 0
 
         for event in events:
-            finished_text = "Oui" if event[8] == 1 else "Non"
+            finished_text = "Oui" if event[9] == 1 else "Non"
             event_date = self.format_date_with_day(event[1]) if event[1] else ""
             end_date = self.format_date_with_day(event[2]) if event[2] else ""
             row_tag = "weekend" if self.is_weekend(event[1]) else ""
-            self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], finished_text, event[6], event[7]), tags=(row_tag,))
+            self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            # Ajouter au total du temps passé
-            total_time_spent += event[6] if event[6] else 0
+            total_time_spent += event[7] if event[7] else 0
 
-        # Mettre à jour l'étiquette avec la somme du temps passé
         self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
-
         conn.close()
 
     def sort_column(self, col, reverse):
@@ -651,7 +678,7 @@ class MainApp(tk.Tk):
         """Vérifier si une date est un week-end"""
         if date_str:
             date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-            return date_obj.weekday() >= 5  # 5 = samedi, 6 = dimanche
+            return date_obj.weekday() >= 5
         return False
 
 
