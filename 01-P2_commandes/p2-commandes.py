@@ -2,53 +2,107 @@ import os
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import requests  # Pour envoyer des requêtes HTTP
+from flask import Flask, request
+import threading
+import logging  # Pour la journalisation
 
-# Chemin vers la base de données SQLite (relatif à l'emplacement du script)
-DB_PATH = "commandes.db"
-ATTACHMENTS_DIR = "attachments"
-CONFIG_FILE = "config-commande-p2.txt"
+# Configuration de la journalisation
+logging.basicConfig(filename='log.txt', level=logging.DEBUG, 
+                    format='%(asctime)s:%(levelname)s:%(message)s')
+
+# Initialiser l'application Flask
+app = Flask(__name__)
+
+# Variable globale pour stocker l'URL du webhook
+WEBHOOK_URL = None
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    """Gérer les requêtes de webhook."""
+    data = request.json
+    logging.info("Webhook reçu : %s", data)  # Journaliser les données reçues
+    return '', 200  # Répondre avec un statut 200
+
+def read_config():
+    """Lire le fichier de configuration pour obtenir l'URL du webhook et les types de commande."""
+    global WEBHOOK_URL
+    types_commande = []
+    CONFIG_FILE = "config-commande-p2.txt"
+    
+    if not os.path.exists(CONFIG_FILE):
+        messagebox.showerror("Erreur", f"Le fichier de configuration {CONFIG_FILE} est introuvable.")
+        logging.error("Fichier de configuration introuvable.")
+        return [], None
+
+    with open(CONFIG_FILE, 'r', encoding='utf-8') as file:
+        lines = file.readlines()
+        for line in lines:
+            line = line.strip()
+            if line:
+                if line.startswith("http"):  # C'est l'URL du webhook
+                    WEBHOOK_URL = line
+                else:
+                    types_commande.append(line)  # Ajouter les types de commande
+    return types_commande, WEBHOOK_URL
+
+def send_webhook_notification(data):
+    """Envoyer une notification webhook."""
+    if WEBHOOK_URL:
+        try:
+            logging.debug("Envoi des données au webhook : %s", data)  # Log des données envoyées
+            response = requests.post(WEBHOOK_URL, json=data)  # Envoyer les données en JSON
+            logging.debug("Statut de la réponse : %d", response.status_code)  # Log de la réponse
+            if response.status_code == 204:  # Discord renvoie 204 pour un succès
+                logging.info("Notification webhook envoyée avec succès.")
+            else:
+                logging.error("Erreur d'envoi de la notification webhook : %d - %s", response.status_code, response.text)
+        except Exception as e:
+            logging.error("Erreur lors de l'envoi de la notification webhook : %s", e)
+    else:
+        logging.error("L'URL du webhook est manquante, impossible d'envoyer la notification.")
 
 def create_attachments_dir():
     """Créer le dossier pour les pièces jointes si nécessaire."""
+    ATTACHMENTS_DIR = "attachments"
     if not os.path.exists(ATTACHMENTS_DIR):
         os.makedirs(ATTACHMENTS_DIR)
 
 def init_db():
     """Initialiser la base de données et créer la table si elle n'existe pas."""
+    DB_PATH = "commandes.db"
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS commandes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            annee TEXT,
-            compte TEXT,
-            type_commande TEXT,
-            commande INTEGER,
-            livree INTEGER,
-            receptionnee INTEGER,
-            fournisseur TEXT,
-            cout_materiel REAL,
-            cout_soustraitance REAL,
-            notes TEXT,
-            numero_devis TEXT,
-            numero_bdc TEXT,
-            documents TEXT
-        )
-    ''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS commandes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        annee TEXT,
+        compte TEXT,
+        type_commande TEXT,
+        commande INTEGER,
+        livree INTEGER,
+        receptionnee INTEGER,
+        fournisseur TEXT,
+        cout_materiel REAL,
+        cout_soustraitance REAL,
+        notes TEXT,
+        numero_devis TEXT,
+        numero_bdc TEXT,
+        documents TEXT
+    )''')
     conn.commit()
     conn.close()
 
 class CommandeApp(tk.Tk):
     def __init__(self):
         super().__init__()
-
         self.title("Suivi des Commandes")
         self.geometry("1280x800")
-
-        # Initialiser la base de données
-        init_db()
+        
+        # Lire la configuration
+        self.types_commande, self.webhook_url = read_config()
         create_attachments_dir()
-
+        init_db()
+        
         # Créer la frame principale
         main_frame = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         main_frame.pack(fill=tk.BOTH, expand=1)
@@ -75,15 +129,8 @@ class CommandeApp(tk.Tk):
         # Charger les commandes existantes
         self.load_commandes()
 
-    def load_types_commande(self):
-        """Charger les types de commande depuis le fichier de configuration."""
-        if not os.path.exists(CONFIG_FILE):
-            messagebox.showerror("Erreur", f"Le fichier de configuration {CONFIG_FILE} est introuvable.")
-            return []
-
-        # Ouvrir le fichier avec l'encodage utf-8
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as file:
-            return [line.strip() for line in file if line.strip()]
+        # Ajouter un bouton Quitter
+        ttk.Button(self, text="Quitter", command=self.quit_app).pack(side=tk.BOTTOM, pady=10)
 
     def create_left_panel(self):
         """Créer les champs dans le volet gauche."""
@@ -113,7 +160,7 @@ class CommandeApp(tk.Tk):
 
         ttk.Label(search_frame, text="Type Commande").pack(side=tk.LEFT, padx=5)
         self.search_type_var = tk.StringVar()
-        type_entry = ttk.Entry(search_frame, textvariable=self.search_type_var)
+        type_entry = ttk.Combobox(search_frame, textvariable=self.search_type_var, values=self.types_commande)
         type_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         ttk.Button(search_frame, text="Rechercher", command=self.search_commandes).pack(side=tk.LEFT, padx=5)
@@ -125,10 +172,9 @@ class CommandeApp(tk.Tk):
             "receptionnee", "fournisseur", "cout_materiel", "cout_soustraitance", 
             "notes", "numero_devis", "numero_bdc", "documents"), show="headings")
 
-        # Configuration des colonnes avec tri et alignement
         for col in self.commandes_list["columns"]:
             self.commandes_list.heading(col, text=col.capitalize(), command=lambda c=col: self.sort_column(c, False))
-            self.commandes_list.column(col, anchor=tk.W, width=120)  # Ajuster la largeur des colonnes pour un bon alignement
+            self.commandes_list.column(col, anchor=tk.W, width=120)  # Ajuster la largeur des colonnes
         
         self.commandes_list.pack(fill=tk.BOTH, expand=1)
 
@@ -144,7 +190,6 @@ class CommandeApp(tk.Tk):
         ttk.Button(button_frame, text="Copier", command=self.copy_commande).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Supprimer", command=self.delete_commande).pack(side=tk.LEFT, padx=5)
 
-        # Champ pour afficher l'ID de la commande
         ttk.Label(self.right_frame, text="ID :").pack(anchor=tk.W)
         self.id_entry = ttk.Entry(self.right_frame, state='readonly')
         self.id_entry.pack(fill=tk.X)
@@ -158,7 +203,7 @@ class CommandeApp(tk.Tk):
         self.account_entry.pack(fill=tk.X)
 
         ttk.Label(self.right_frame, text="Type Commande :").pack(anchor=tk.W)
-        self.type_combobox = ttk.Combobox(self.right_frame, values=self.load_types_commande())  # Charger les types de commande
+        self.type_combobox = ttk.Combobox(self.right_frame, values=self.types_commande)  # Charger les types de commande
         self.type_combobox.pack(fill=tk.X)
 
         self.commanded_var = tk.IntVar()
@@ -194,16 +239,13 @@ class CommandeApp(tk.Tk):
         self.bdc_number_entry = ttk.Entry(self.right_frame)
         self.bdc_number_entry.pack(fill=tk.X)
 
-        # Ajouter un cadre pour les boutons de gestion des pièces jointes
         document_button_frame = ttk.Frame(self.right_frame)
         document_button_frame.pack(pady=5)
 
-        # Ajouter des boutons pour gérer les pièces jointes
         ttk.Button(document_button_frame, text="Ajouter Document", command=self.add_document).pack(side=tk.LEFT, padx=5)
         ttk.Button(document_button_frame, text="Ouvrir Document", command=self.open_document).pack(side=tk.LEFT, padx=5)
         ttk.Button(document_button_frame, text="Supprimer Document", command=self.remove_document).pack(side=tk.LEFT, padx=5)
 
-        # Liste des pièces jointes
         ttk.Label(self.right_frame, text="Documents").pack(anchor=tk.W)
         self.documents_listbox = tk.Listbox(self.right_frame)
         self.documents_listbox.pack(fill=tk.X, pady=5)
@@ -228,7 +270,7 @@ class CommandeApp(tk.Tk):
         total_material = 0.0
         total_subcontracting = 0.0
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect("commandes.db")
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM commandes ORDER BY annee ASC")
         commandes = cursor.fetchall()
@@ -285,10 +327,9 @@ class CommandeApp(tk.Tk):
         total_material = 0.0
         total_subcontracting = 0.0
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect("commandes.db")
         cursor = conn.cursor()
 
-        # Construire la requête en fonction des champs de recherche
         query = "SELECT * FROM commandes WHERE 1=1"
         params = []
 
@@ -338,14 +379,12 @@ class CommandeApp(tk.Tk):
             return  # Si l'utilisateur annule
 
         with open(file_path, 'w') as file:
-            # Écrire les totaux en haut du fichier
             file.write("----\n")
             file.write("Total Coût Matériel: " + self.total_material_label.cget("text").split(": ")[1] + "\n")
             file.write("Total Coût Sous-Traitance: " + self.total_subcontracting_label.cget("text").split(": ")[1] + "\n")
             file.write("Total Commandes: " + self.total_count_label.cget("text").split(": ")[1] + "\n")
             file.write("----\n\n")
 
-            # Écrire les données de la Treeview
             for child in self.commandes_list.get_children():
                 values = self.commandes_list.item(child)["values"]
                 file.write(f"Année : {values[1]}\n")
@@ -366,94 +405,155 @@ class CommandeApp(tk.Tk):
 
     def sort_column(self, col, reverse):
         """Trier les commandes selon la colonne spécifiée."""
-        # Obtenir les valeurs de la colonne
         commandes = [(self.commandes_list.set(k, col), k) for k in self.commandes_list.get_children('')]
         commandes.sort(reverse=reverse)
 
         for index, (val, k) in enumerate(commandes):
             self.commandes_list.move(k, '', index)
 
-        # Inverser l'ordre du tri pour la prochaine sélection
         self.commandes_list.heading(col, command=lambda: self.sort_column(col, not reverse))
 
     def create_new_commande(self):
         """Créer une nouvelle commande."""
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        try:
+            conn = sqlite3.connect("commandes.db")
+            cursor = conn.cursor()
 
-        data = (
-            self.year_entry.get(),
-            self.account_entry.get(),
-            self.type_combobox.get(),  # Obtenir le type de commande depuis la combobox
-            self.commanded_var.get(),
-            self.delivered_var.get(),
-            self.received_var.get(),
-            self.supplier_entry.get(),
-            float(self.material_cost_entry.get() or 0),
-            float(self.subcontracting_cost_entry.get() or 0),
-            self.notes_entry.get(),
-            self.quote_number_entry.get(),
-            self.bdc_number_entry.get(),
-            ""  # Documents laissés vides
-        )
+            data = (
+                self.year_entry.get(),
+                self.account_entry.get(),
+                self.type_combobox.get(),
+                self.commanded_var.get(),
+                self.delivered_var.get(),
+                self.received_var.get(),
+                self.supplier_entry.get(),
+                float(self.material_cost_entry.get() or 0),
+                float(self.subcontracting_cost_entry.get() or 0),
+                self.notes_entry.get(),
+                self.quote_number_entry.get(),
+                self.bdc_number_entry.get(),
+                ""  # Documents laissés vides
+            )
 
-        cursor.execute("""
-            INSERT INTO commandes (annee, compte, type_commande, commande, livree, receptionnee, fournisseur, 
-                                   cout_materiel, cout_soustraitance, notes, numero_devis, numero_bdc, documents)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", data)
-        conn.commit()
-        conn.close()
+            cursor.execute("""INSERT INTO commandes (annee, compte, type_commande, commande, livree, receptionnee, fournisseur, 
+                              cout_materiel, cout_soustraitance, notes, numero_devis, numero_bdc, documents)
+                              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", data)
+            conn.commit()
+            conn.close()
 
-        self.load_commandes()
-        self.clear_form()
+            self.load_commandes()
+            self.clear_form()
+
+            messagebox.showinfo("Succès", "Commande créée avec succès.")
+            logging.info("Commande créée avec succès : %s", data)  # Log de la création de la commande
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'insertion : {e}")
+            logging.error("Erreur lors de la création de la commande : %s", e)
 
     def save_commande(self):
         """Modifier la commande actuelle."""
         selected_item = self.commandes_list.selection()
         if not selected_item:
             messagebox.showwarning("Avertissement", "Veuillez sélectionner une commande à modifier.")
+            logging.warning("Aucune commande sélectionnée pour la modification.")
             return
 
         commande_id = self.commandes_list.item(selected_item)["values"][0]  # Récupérer l'ID
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect("commandes.db")
         cursor = conn.cursor()
 
         documents = ",".join(self.documents_listbox.get(0, tk.END))  # Obtenir les chemins des documents
 
+        # Lire les valeurs des champs avant la mise à jour
+        commanded_status = self.commanded_var.get()
+        delivered_status = self.delivered_var.get()
+        received_status = self.received_var.get()
+
+        # Récupérer les valeurs des champs
+        year = self.year_entry.get()
+        account = self.account_entry.get()
+        type_commande = self.type_combobox.get()
+        fournisseur = self.supplier_entry.get()
+        notes = self.notes_entry.get()
+        quote_number = self.quote_number_entry.get()
+        bdc_number = self.bdc_number_entry.get()
+
+        # Log des valeurs avant l'enregistrement
+        logging.info("Valeurs avant mise à jour : Année='%s', Compte='%s', Type Commande='%s', Fournisseur='%s', Notes='%s', Numéro de Devis='%s', Numéro BDC='%s'",
+                     year, account, type_commande, fournisseur, notes, quote_number, bdc_number)
+
         data = (
-            self.year_entry.get(),
-            self.account_entry.get(),
-            self.type_combobox.get(),  # Obtenir le type de commande depuis la combobox
-            self.commanded_var.get(),
-            self.delivered_var.get(),
-            self.received_var.get(),
-            self.supplier_entry.get(),
+            year,
+            account,
+            type_commande,
+            commanded_status,
+            delivered_status,
+            received_status,
+            fournisseur,
             float(self.material_cost_entry.get() or 0),
             float(self.subcontracting_cost_entry.get() or 0),
-            self.notes_entry.get(),
-            self.quote_number_entry.get(),
-            self.bdc_number_entry.get(),
+            notes,
+            quote_number,
+            bdc_number,
             documents,  # Mettre à jour la liste des documents
             commande_id  # ID de l'enregistrement à modifier
         )
 
-        cursor.execute("""
-            UPDATE commandes 
-            SET annee=?, compte=?, type_commande=?, commande=?, livree=?, receptionnee=?, fournisseur=?, 
-                cout_materiel=?, cout_soustraitance=?, notes=?, numero_devis=?, numero_bdc=?, documents=? 
-            WHERE id=?""", data)
-        conn.commit()
-        conn.close()
+        try:
+            cursor.execute("""UPDATE commandes 
+                              SET annee=?, compte=?, type_commande=?, commande=?, livree=?, receptionnee=?, fournisseur=?, 
+                                  cout_materiel=?, cout_soustraitance=?, notes=?, numero_devis=?, numero_bdc=?, documents=? 
+                              WHERE id=?""", data)
+            conn.commit()
+            logging.info("Commande ID %d mise à jour avec succès.", commande_id)
+        except Exception as e:
+            logging.error("Erreur lors de la mise à jour de la commande ID %d : %s", commande_id, e)
+            messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'enregistrement : {e}")
+        finally:
+            conn.close()
 
         self.load_commandes()
         self.clear_form()
+
+        # Envoyer une notification webhook si "Livrée" est cochée
+        logging.info("État de la case 'Livrée' pour la commande ID %d : %d", commande_id, delivered_status)
+        
+        if delivered_status == 1:  # Vérifier si la case "Livrée" est cochée
+            logging.info("Préparation à envoyer la notification webhook pour la commande ID %d", commande_id)
+            
+            # Log des valeurs à envoyer dans la notification
+            logging.info("Valeurs à envoyer dans la notification : Année='%s', Compte='%s', Type Commande='%s', Fournisseur='%s', Notes='%s', Numéro de Devis='%s', Numéro BDC='%s'",
+                         year, account, type_commande, fournisseur, notes, quote_number, bdc_number)
+
+            # Vérifier les valeurs et les remplacer par "Non spécifié" si elles sont vides
+            webhook_data = {
+                'content': "Commande Livrée",  # Modification ici
+                'embeds': [
+                    {
+                        'title': "Détails de la Commande",
+                        'fields': [
+                            {'name': "Année", 'value': year if year else "Non spécifié"},
+                            {'name': "Compte", 'value': account if account else "Non spécifié"},
+                            {'name': "Type Commande", 'value': type_commande if type_commande else "Non spécifié"},
+                            {'name': "Fournisseur", 'value': fournisseur if fournisseur else "Non spécifié"},
+                            {'name': "Notes", 'value': notes if notes else "Non spécifié"},
+                            {'name': "Numéro de Devis", 'value': quote_number if quote_number else "Non spécifié"},
+                            {'name': "Numéro BDC", 'value': bdc_number if bdc_number else "Non spécifié"},
+                        ],
+                        'footer': {'text': "Notification de commande livrée"}
+                    }
+                ]
+            }
+            logging.info("Envoi de la notification webhook : %s", webhook_data)  # Log des données à envoyer
+            send_webhook_notification(webhook_data)  # Envoyer les données
+        else:
+            logging.info("La commande ID %d n'est pas marquée comme livrée, notification non envoyée.", commande_id)
 
     def copy_commande(self):
         """Copier la commande sélectionnée."""
         selected_item = self.commandes_list.selection()
         if selected_item:
             commande = self.commandes_list.item(selected_item, 'values')
-            # Créer un nouveau formulaire
             self.clear_form()  # Effacer le formulaire avant de remplir les champs
             self.year_entry.insert(0, commande[1])
             self.account_entry.insert(0, commande[2])
@@ -484,7 +584,7 @@ class CommandeApp(tk.Tk):
             if file_path:
                 # Déplacer le fichier dans le répertoire des pièces jointes
                 file_name = os.path.basename(file_path)
-                destination = os.path.join(ATTACHMENTS_DIR, file_name)
+                destination = os.path.join("attachments", file_name)
                 if not os.path.exists(destination):  # Pour éviter les conflits de noms
                     os.rename(file_path, destination)
                 self.documents_listbox.insert(tk.END, destination)  # Ajouter le chemin dans la liste
@@ -511,13 +611,14 @@ class CommandeApp(tk.Tk):
             confirm = messagebox.askyesno("Confirmation", "Êtes-vous sûr de vouloir supprimer cette commande ?")
             if confirm:
                 commande_id = self.commandes_list.item(selected_item)["values"][0]  # Récupérer l'ID de la commande
-                conn = sqlite3.connect(DB_PATH)
+                conn = sqlite3.connect("commandes.db")
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM commandes WHERE id=?", (commande_id,))
                 conn.commit()
                 conn.close()
                 self.load_commandes()
                 self.clear_form()
+                logging.info("Commande supprimée avec succès : %d", commande_id)  # Log de la suppression
         else:
             messagebox.showwarning("Avertissement", "Veuillez sélectionner une commande à supprimer.")
 
@@ -540,6 +641,12 @@ class CommandeApp(tk.Tk):
         self.bdc_number_entry.delete(0, tk.END)
         self.documents_listbox.delete(0, tk.END)  # Vider la liste des documents
 
+    def quit_app(self):
+        """Fermer l'application et le serveur Flask."""
+        self.quit()  # Quitter l'application Tkinter
+        logging.info("Application fermée.")  # Log de la fermeture
+
 if __name__ == "__main__":
-    app = CommandeApp()
-    app.mainloop()
+    threading.Thread(target=app.run, kwargs={'port': 5000}, daemon=True).start()  # Démarrer Flask en arrière-plan
+    app = CommandeApp()  # Créer l'application de commande
+    app.mainloop()  # Lancer l'application Tkinter
