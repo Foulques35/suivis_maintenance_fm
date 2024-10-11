@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calcul de Débit d'Air</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f7;
+            color: #333;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .network {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin: 10px;
+            border-radius: 10px;
+            background-color: white;
+            width: 90%;
+        }
+        .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 10px 0;
+            flex-wrap: wrap;
+        }
+        h1 {
+            text-align: center;
+            font-weight: 600;
+            color: #1d1d1f;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #007aff;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #005bb5;
+        }
+        .delete-button {
+            background-color: #ff3b30;
+            color: white;
+            font-size: 12px;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            line-height: 25px;
+            text-align: center;
+            cursor: pointer;
+        }
+        input[type="text"], input[type="number"] {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            width: 120px;
+        }
+        label {
+            margin-right: 10px;
+        }
+        #export-buttons {
+            margin: 20px;
+            text-align: center;
+        }
+        canvas {
+            margin-top: 20px;
+            max-height: 400px;
+        }
+        .total-debit {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Calcul de Débit d'Air</h1>
+    
+    <div id="export-buttons">
+        <button onclick="saveData()">Sauvegarder les données</button>
+        <input type="file" id="jsonFileInput" accept=".json" onchange="importJSON()" />
+        <button onclick="exportPageAsImage()">Exporter la page en image</button>
+    </div>
+
+    <div>
+        <button onclick="addNetwork()">Ajouter Réseau</button>
+    </div>
+    
+    <div class="container" id="networksContainer">
+        <!-- Les réseaux vont s'ajouter ici -->
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+
+    <script>
+        let networkCount = 0;
+
+        function addNetwork() {
+            networkCount++;
+            const container = document.getElementById('networksContainer');
+            const networkDiv = document.createElement('div');
+            networkDiv.classList.add('network');
+            networkDiv.id = `network-${networkCount}`;
+            
+            networkDiv.innerHTML = `
+                <div class="row">
+                    <label>Bâtiment: <input type="text" id="batiment-${networkCount}"></label>
+                    <label>Étage: <input type="text" id="etage-${networkCount}" style="width: 70px;"></label>
+                    <button class="delete-button" onclick="deleteNetwork(${networkCount})">-</button>
+                </div>
+                <table id="gaine-table-${networkCount}">
+                    <thead>
+                        <tr>
+                            <th>Localisation</th>
+                            <th>Type</th>
+                            <th>Dimensions</th>
+                            <th>Vitesse (m/s)</th>
+                            <th>Débit (m³/h)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="gaine-container-${networkCount}"></tbody>
+                </table>
+                <button onclick="addGaine(${networkCount}, 'carrée')">Ajouter Gaine Carrée</button>
+                <button onclick="addGaine(${networkCount}, 'circulaire')">Ajouter Gaine Circulaire</button>
+                <button onclick="calculateFlows(${networkCount})">Calculer les débits</button>
+                <div class="total-debit">Total Débit: <span id="total-debit-${networkCount}">0</span> m³/h</div>
+                <canvas id="flowChart-${networkCount}" width="400" height="200"></canvas>
+            `;
+            container.appendChild(networkDiv);
+        }
+
+        function addGaine(networkId, type) {
+            const gaineContainer = document.getElementById(`gaine-container-${networkId}`);
+            const gaineDiv = document.createElement('tr');
+
+            gaineDiv.innerHTML = `
+                <td><input type="text" id="gaine-name-${networkId}-${gaineContainer.children.length + 1}" placeholder="Nom"></td>
+                <td>${type}</td>
+                <td>
+                    ${type === 'carrée' ? `
+                        <input type="number" id="width-${networkId}-${gaineContainer.children.length + 1}" placeholder="Largeur (mm)">
+                        <input type="number" id="length-${networkId}-${gaineContainer.children.length + 1}" placeholder="Longueur (mm)">` : `
+                        <input type="number" id="diameter-${networkId}-${gaineContainer.children.length + 1}" placeholder="Diamètre (mm)">`
+                    }
+                </td>
+                <td><input type="number" id="velocity-${networkId}-${gaineContainer.children.length + 1}" placeholder="Vitesse (m/s)"></td>
+                <td><span id="debit-${networkId}-${gaineContainer.children.length + 1}">0</span> m³/h</td>
+                <td><button class="delete-button" onclick="deleteGaine(this)">-</button></td>
+            `;
+            gaineContainer.appendChild(gaineDiv);
+        }
+
+        function deleteNetwork(networkId) {
+            const network = document.getElementById(`network-${networkId}`);
+            network.remove();
+        }
+
+        function deleteGaine(button) {
+            const row = button.parentNode.parentNode;
+            row.remove();
+        }
+
+        function calculateFlows(networkId) {
+            const labels = [];
+            const data = [];
+            let totalFlowRate = 0;
+
+            const gaineRows = document.querySelectorAll(`#gaine-container-${networkId} tr`);
+            gaineRows.forEach((gaine, gIndex) => {
+                const diameter = parseFloat(document.getElementById(`diameter-${networkId}-${gIndex + 1}`)?.value) / 1000;
+                const width = parseFloat(document.getElementById(`width-${networkId}-${gIndex + 1}`)?.value) / 1000;
+                const length = parseFloat(document.getElementById(`length-${networkId}-${gIndex + 1}`)?.value) / 1000;
+                const velocity = parseFloat(document.getElementById(`velocity-${networkId}-${gIndex + 1}`).value);
+
+                let area, flowRate;
+
+                if (!isNaN(diameter)) {
+                    const radius = diameter / 2;
+                    area = Math.PI * Math.pow(radius, 2);
+                } else if (!isNaN(width) && !isNaN(length)) {
+                    area = width * length;
+                }
+
+                if (area && velocity) {
+                    flowRate = area * velocity * 3600;
+                    const localisation = document.getElementById(`gaine-name-${networkId}-${gIndex + 1}`).value;
+                    labels.push(localisation);
+                    data.push(flowRate);
+                    document.getElementById(`debit-${networkId}-${gIndex + 1}`).textContent = flowRate.toFixed(2);
+                    totalFlowRate += flowRate;
+                }
+            });
+
+            // Mettre à jour le total débit
+            document.getElementById(`total-debit-${networkId}`).textContent = totalFlowRate.toFixed(2);
+
+            // Mise à jour du graphique
+            updateFlowChart(networkId, labels, data);
+        }
+
+        function updateFlowChart(networkId, labels, data) {
+            const ctx = document.getElementById(`flowChart-${networkId}`).getContext('2d');
+
+            // Si le graphique existe déjà, on le détruit avant de le redessiner
+            if (Chart.getChart(`flowChart-${networkId}`) != undefined) {
+                Chart.getChart(`flowChart-${networkId}`).destroy();
+            }
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Débit (m³/h)',
+                        data: data,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    },
+                    maintainAspectRatio: false,
+                }
+            });
+        }
+
+        // Sauvegarde des données dans un fichier JSON
+        function saveData() {
+            const networksData = { networks: [] }; // Nouvelle structure
+
+            document.querySelectorAll('.network').forEach((network, index) => {
+                const batiment = document.getElementById(`batiment-${index + 1}`).value;
+                const etage = document.getElementById(`etage-${index + 1}`).value;
+                const gaines = [];
+
+                document.querySelectorAll(`#gaine-container-${index + 1} tr`).forEach((gaine, gIndex) => {
+                    const localisation = document.getElementById(`gaine-name-${index + 1}-${gIndex + 1}`).value;
+                    const width = document.getElementById(`width-${index + 1}-${gIndex + 1}`)?.value || '';
+                    const length = document.getElementById(`length-${index + 1}-${gIndex + 1}`)?.value || '';
+                    const diameter = document.getElementById(`diameter-${index + 1}-${gIndex + 1}`)?.value || '';
+                    const velocity = document.getElementById(`velocity-${index + 1}-${gIndex + 1}`).value;
+                    const debit = document.getElementById(`debit-${index + 1}-${gIndex + 1}`).textContent;
+
+                    // Déterminer le type de gaine
+                    const type = width && length ? "carrée" : "circulaire";
+                    
+                    gaines.push({ localisation, type, width, length, diameter, velocity, debit });
+                });
+
+                networksData.networks.push({ batiment, etage, gaines });
+            });
+
+            const jsonContent = JSON.stringify(networksData, null, 2);
+            const blob = new Blob([jsonContent], { type: "application/json" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "releve_debit_air.json"; // Nom par défaut pour le fichier
+            document.body.appendChild(link);
+            link.click();
+        }
+
+        // Importation des données depuis un fichier JSON
+        function importJSON() {
+            const file = document.getElementById('jsonFileInput').files[0];
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                const networksData = JSON.parse(e.target.result).networks;
+                // Vider les réseaux existants avant de charger les nouveaux
+                document.getElementById('networksContainer').innerHTML = '';
+                networkCount = 0; // Réinitialiser le compteur des réseaux
+
+                networksData.forEach((network) => {
+                    addNetwork();
+                    const currentNetworkId = networkCount;
+                    document.getElementById(`batiment-${currentNetworkId}`).value = network.batiment;
+                    document.getElementById(`etage-${currentNetworkId}`).value = network.etage;
+
+                    network.gaines.forEach(gaine => {
+                        addGaine(currentNetworkId, gaine.type);
+                        const gaineId = document.getElementById(`gaine-container-${currentNetworkId}`).children.length;
+                        document.getElementById(`gaine-name-${currentNetworkId}-${gaineId}`).value = gaine.localisation;
+                        if (gaine.type === "carrée") {
+                            document.getElementById(`width-${currentNetworkId}-${gaineId}`).value = gaine.width;
+                            document.getElementById(`length-${currentNetworkId}-${gaineId}`).value = gaine.length;
+                        } else {
+                            document.getElementById(`diameter-${currentNetworkId}-${gaineId}`).value = gaine.diameter;
+                        }
+                        document.getElementById(`velocity-${currentNetworkId}-${gaineId}`).value = gaine.velocity;
+                        document.getElementById(`debit-${currentNetworkId}-${gaineId}`).textContent = gaine.debit;
+                    });
+                });
+                alert('Données importées avec succès !');
+            };
+
+            reader.readAsText(file);
+        }
+
+        // Exporter la page entière en tant qu'image
+        function exportPageAsImage() {
+            html2canvas(document.body).then(function(canvas) {
+                const link = document.createElement('a');
+                link.href = canvas.toDataURL('image/png');
+                link.download = 'page_complete.png';
+                link.click();
+            });
+        }
+    </script>
+</body>
+</html>
