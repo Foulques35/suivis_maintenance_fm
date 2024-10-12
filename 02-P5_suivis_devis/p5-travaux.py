@@ -1,4 +1,6 @@
 import os
+import platform
+from pathlib import Path
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -482,7 +484,16 @@ class CommandeApp(tk.Tk):
         selected_item = self.documents_listbox.curselection()
         if selected_item:
             document = self.documents_listbox.get(selected_item)
-            os.startfile(document)  # Ouvrir le chemin complet
+            document_path = Path(document.replace("\\", "/"))  # Remplacer les backslashes par des slashes
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(document_path)  # Utiliser startfile sur Windows
+                elif platform.system() == "Linux":
+                    os.system(f'xdg-open "{document_path}"')  # Utiliser xdg-open sur Linux
+                else:
+                    messagebox.showwarning("Avertissement", "Système d'exploitation non pris en charge pour ouvrir des documents.")
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible d'ouvrir le document : {e}")
 
     def remove_document(self):
         """Supprimer le document sélectionné."""
@@ -528,3 +539,4 @@ class CommandeApp(tk.Tk):
 if __name__ == "__main__":
     app = CommandeApp()
     app.mainloop()
+
