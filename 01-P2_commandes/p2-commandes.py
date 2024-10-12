@@ -1,4 +1,5 @@
 import os
+import platform
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -6,6 +7,7 @@ import requests  # Pour envoyer des requêtes HTTP
 from flask import Flask, request
 import threading
 import logging  # Pour la journalisation
+from pathlib import Path
 
 # Configuration de la journalisation
 logging.basicConfig(filename='log.txt', level=logging.DEBUG, 
@@ -594,8 +596,17 @@ class CommandeApp(tk.Tk):
         selected_item = self.documents_listbox.curselection()
         if selected_item:
             document = self.documents_listbox.get(selected_item)
-            os.startfile(document)  # Ouvrir le chemin complet
-
+            document_path = Path(document.replace("\\", "/"))  # Remplacer les backslashes par des slashes
+            try:
+                if platform.system() == "Windows":
+                    os.startfile(document_path)  # Utiliser startfile sur Windows
+                elif platform.system() == "Linux":
+                    os.system(f'xdg-open "{document_path}"')  # Utiliser xdg-open sur Linux
+                else:
+                    messagebox.showwarning("Avertissement", "Système d'exploitation non pris en charge pour ouvrir des documents.")
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible d'ouvrir le document : {e}")
+            
     def remove_document(self):
         """Supprimer le document sélectionné."""
         selected_item = self.documents_listbox.curselection()
@@ -650,3 +661,4 @@ if __name__ == "__main__":
     threading.Thread(target=app.run, kwargs={'port': 5000}, daemon=True).start()  # Démarrer Flask en arrière-plan
     app = CommandeApp()  # Créer l'application de commande
     app.mainloop()  # Lancer l'application Tkinter
+
