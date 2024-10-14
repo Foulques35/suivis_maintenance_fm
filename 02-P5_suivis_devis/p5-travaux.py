@@ -47,6 +47,10 @@ class CommandeApp(tk.Tk):
         init_db()
         create_attachments_dir()
 
+        # Initialiser les variables pour les totaux
+        self.total_material = 0.0
+        self.total_subcontracting = 0.0
+
         # Créer la frame principale
         main_frame = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
         main_frame.pack(fill=tk.BOTH, expand=1)
@@ -196,8 +200,8 @@ class CommandeApp(tk.Tk):
     def load_commandes(self):
         """Charger les commandes depuis la base de données."""
         self.commandes_list.delete(*self.commandes_list.get_children())
-        total_material = 0.0
-        total_subcontracting = 0.0
+        self.total_material = 0.0
+        self.total_subcontracting = 0.0
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -207,15 +211,15 @@ class CommandeApp(tk.Tk):
         for commande in commandes:
             self.commandes_list.insert("", "end", values=commande)  # Inclut l'ID
             if commande[3] == 1:  # Vérifier si Devis accepté est coché (1 = vrai)
-                total_material += commande[7]  # Achats
-                total_subcontracting += commande[8]  # Vente
+                self.total_material += commande[7]  # Achats
+                self.total_subcontracting += commande[8]  # Vente
 
         conn.close()
 
         # Calculer et afficher la marge brute et le ratio
-        total_margin = total_subcontracting - total_material
-        ratio_margin = (total_margin / total_subcontracting * 100) if total_subcontracting > 0 else 0.0
-        self.update_totals(total_material, total_subcontracting, total_margin, ratio_margin, len(commandes))
+        total_margin = self.total_subcontracting - self.total_material
+        ratio_margin = (total_margin / self.total_subcontracting * 100) if self.total_subcontracting > 0 else 0.0
+        self.update_totals(self.total_material, self.total_subcontracting, total_margin, ratio_margin, len(commandes))
 
     def load_selected_commande(self, event):
         """Charger les détails de la commande sélectionnée dans le volet droit."""
@@ -253,8 +257,8 @@ class CommandeApp(tk.Tk):
     def search_commandes(self):
         """Rechercher des commandes basées sur l'année, le compte et les notes."""
         self.commandes_list.delete(*self.commandes_list.get_children())
-        total_material = 0.0
-        total_subcontracting = 0.0
+        self.total_material = 0.0
+        self.total_subcontracting = 0.0
 
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
@@ -266,7 +270,7 @@ class CommandeApp(tk.Tk):
         if self.search_compte_var.get():
             query += " AND compte LIKE ?"
             params.append('%' + self.search_compte_var.get() + '%')
-        
+    
         if self.search_annee_var.get():
             query += " AND ref_devis LIKE ?"
             params.append('%' + self.search_annee_var.get() + '%')
@@ -279,17 +283,20 @@ class CommandeApp(tk.Tk):
         commandes = cursor.fetchall()
 
         for commande in commandes:
-            if commande[3] == 1:  # Vérifier si Devis accepté est coché (1 = vrai)
-                self.commandes_list.insert("", "end", values=commande)  # Inclut l'ID
-                total_material += commande[7]  # Achats
-                total_subcontracting += commande[8]  # Vente
+            # Afficher toutes les commandes
+            self.commandes_list.insert("", "end", values=commande)  # Inclut l'ID
+        
+            # Calculer les totaux seulement si la commande est validée (Devis accepté = 1)
+            if commande[3] == 1:
+                self.total_material += commande[7]  # Achats
+                self.total_subcontracting += commande[8]  # Vente
 
         conn.close()
 
         # Calculer et afficher la marge brute et le ratio
-        total_margin = total_subcontracting - total_material
-        ratio_margin = (total_margin / total_subcontracting * 100) if total_subcontracting > 0 else 0.0
-        self.update_totals(total_material, total_subcontracting, total_margin, ratio_margin, len(commandes))
+        total_margin = self.total_subcontracting - self.total_material
+        ratio_margin = (total_margin / self.total_subcontracting * 100) if self.total_subcontracting > 0 else 0.0
+        self.update_totals(self.total_material, self.total_subcontracting, total_margin, ratio_margin, len(commandes))
 
     def update_totals(self, total_material, total_subcontracting, total_margin, ratio_margin, count):
         """Mettre à jour les labels pour afficher les totaux et le nombre de commandes."""
@@ -372,16 +379,12 @@ class CommandeApp(tk.Tk):
                 ""  # Documents laissés vides
             )
 
-            # Afficher les données à insérer pour le débogage
-            print("Données à insérer:", data)  # Debugging line
-
             cursor.execute("""
                 INSERT INTO commandes (ref_devis, compte, devis_accepte, commande, livraison, reception, 
                                        achats, vente, notes, documents)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", data)
             conn.commit()
 
-            print("Commande insérée avec succès.")  # Debugging line
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de l'insertion des données: {e}")
 
@@ -433,7 +436,6 @@ class CommandeApp(tk.Tk):
                 WHERE id=?""", data)
             conn.commit()
 
-            print("Commande mise à jour avec succès.")  # Debugging line
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la mise à jour des données: {e}")
 
@@ -539,4 +541,3 @@ class CommandeApp(tk.Tk):
 if __name__ == "__main__":
     app = CommandeApp()
     app.mainloop()
-
