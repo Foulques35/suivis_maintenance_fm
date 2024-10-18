@@ -13,7 +13,7 @@ La quatrième application : P5-travaux sert à suivre les devis avec archivage d
 La cinquième application : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
 La sixième application : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".\
 
-Les dépendances nécessaires pour exécuter le code sont : \
+Les dépendances nécessaires pour exécuter le code sont :
 
 **Python 3.12** \
 tkinter : La bibliothèque pour créer des interfaces graphiques en Python. \
