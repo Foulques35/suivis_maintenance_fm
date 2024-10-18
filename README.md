@@ -5,13 +5,13 @@ Le code est généré par IA (GPT4), des adapations sont faites à la main selon
 Projet personnel pour la gestion de données et l'archivage de documents. \
 Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments. 
 
-**La première application** : Registre sert à archiver des activité et événements avec liaison de fichiers. \
-**La seconde application** : Archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures. \
-**Le dossier outils techniques** à pour but de regrouper divers petites applications html autonomes (pour la compatibilité avec avec les supports mobiles) permettant de créer des rapports techniques simples.
-**La troisième application** : P2-commande sert à suivre et archiver ses commandes avec liaisons de fichiers. \
-**La quatrième application** : P5-travaux sert à suivre les devis avec archivage des documents avec liaisons de fichiers. \
-**La cinquième application** : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
-**La sixième application** : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
+**- La première application** : Registre sert à archiver des activité et événements avec liaison de fichiers. \
+**- La seconde application** : Archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures. \
+**- Le dossier outils techniques** à pour but de regrouper divers petites applications html autonomes (pour la compatibilité avec avec les supports mobiles) permettant de créer des rapports techniques simples.
+**- La troisième application** : P2-commande sert à suivre et archiver ses commandes avec liaisons de fichiers. \
+**- La quatrième application** : P5-travaux sert à suivre les devis avec archivage des documents avec liaisons de fichiers. \
+**- La cinquième application** : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
+**- La sixième application** : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
 
 Les dépendances nécessaires pour exécuter le code sont :
 
