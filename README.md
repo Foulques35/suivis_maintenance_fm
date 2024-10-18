@@ -10,10 +10,10 @@ La seconde application : Archiviste sert à manipuler des fichiers pour les reno
 Le dossier outils techniques à pour but de regrouper divers petites applications html (pour la compatibilité avec avec les supports mobiles) permettant de créer des rapports techniques simples.
 La troisième application : P2-commande sert à suivre et archiver ses commandes. \
 La quatrième application : P5-travaux sert à suivre les devis avec archivage des documents. \
-La cinquième application : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.
-La sixième application : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
+La cinquième application : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
+La sixième application : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".\
 
-Les dépendances nécessaires pour exécuter le code sont :
+Les dépendances nécessaires pour exécuter le code sont :\
 
 **Python 3.12** \
 tkinter : La bibliothèque pour créer des interfaces graphiques en Python.\
