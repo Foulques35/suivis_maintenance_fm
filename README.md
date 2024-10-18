@@ -1,6 +1,6 @@
 ## Projet Archiviste
 
-Le code est généré par IA (GPT4), des adapations sont faites à la main selon les besoins. 
+//Le code est généré par IA (GPT4), des adapations sont faites à la main selon les besoins.//
 
 Projet personnel pour la gestion de données et l'archivage de documents. \
 Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments. 
