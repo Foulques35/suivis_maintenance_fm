@@ -11,7 +11,7 @@ Le dossier outils techniques à pour but de regrouper divers petites application
 La troisième application : P2-commande sert à suivre et archiver ses commandes. \
 La quatrième application : P5-travaux sert à suivre les devis avec archivage des documents. \
 La cinquième application : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
-La sixième application : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".\
+La sixième application : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
 
 Les dépendances nécessaires pour exécuter le code sont :
 
