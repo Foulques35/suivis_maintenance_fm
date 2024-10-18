@@ -38,6 +38,6 @@ Cependant, il faudra installer tkcalendar s'il n'est pas déjà disponible dans 
 **installation de tkcalendar : pip install tkcalendar** \
 **Installation de requests + flask : pip install Flask requests** \
 **Installation de Pillow : pip install pillow** \
-**Installation de Reportlab : pip install Reportlab** \
+**Installation de Reportlab : pip install Reportlab**
 
 IDE : Thonny
