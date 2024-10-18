@@ -3,7 +3,7 @@ Projet Archiviste
 Le code est généré par IA (GPT4), des adapations sont faites à la main selon les besoins. 
 
 Projet personnel pour la gestion de données et l'archivage de documents. \
-Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments. \
+Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments. 
 
 La première application : Registre sert à archiver des activité et événements. \
 La seconde application : Archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures. \
