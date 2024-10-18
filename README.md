@@ -32,7 +32,7 @@ Créer principalement pour le suivis des activités de maintenance d'un ou plusi
 **Reportlab** : pour la création de documents PDF. \
 **extract-msg** : pour lire les fichier eml et msg. \
 
-### Installation des dépendances : \
+### Installation des dépendances :
 Pour les bibliothèques intégrées comme sqlite3, locale, datetime, os, et webbrowser, il n'y a pas besoin d'installation supplémentaire. \
 Cependant, il faudra installer tkcalendar s'il n'est pas déjà disponible dans l'environnement. \
 
