@@ -5,15 +5,15 @@ Le code est généré par IA (GPT4), des adapations sont faites à la main selon
 Projet personnel pour la gestion de données et l'archivage de documents. \
 Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments. 
 
-**- 01** : Registre sert à archiver des activité et événements avec liaison de fichiers. \
-**- 02** : Archiviste sert à manipuler des fichiers pour les renommer selon une nomenclatures. \
+**- 00** : Registre sert à archiver des activité et événements avec liaison de fichiers. \
+**- 01** : P2-commande sert à suivre et archiver ses commandes avec liaisons de fichiers. \
+**- 02** : P5-travaux sert à suivre les devis avec archivage des documents avec liaisons de fichiers. \
 **- 03** à pour but de regrouper divers petites applications html autonomes (pour la compatibilité avec avec les supports mobiles) permettant de créer des rapports techniques simples.
-**- 04** : P2-commande sert à suivre et archiver ses commandes avec liaisons de fichiers. \
-**- 05** : P5-travaux sert à suivre les devis avec archivage des documents avec liaisons de fichiers. \
-**- 06** : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
-**- 07** : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
+**- 04** : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
+**- 05** : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
+**- Archiviste.py** :  sert à manipuler des fichiers pour les renommer selon une nomenclatures. \
 
-Les dépendances nécessaires pour exécuter le code sont :
+### Les dépendances nécessaires pour exécuter le code sont :
 
 **Python 3.12** \
 **tkinter** : La bibliothèque pour créer des interfaces graphiques en Python. \
@@ -32,7 +32,7 @@ Les dépendances nécessaires pour exécuter le code sont :
 **Reportlab** : pour la création de documents PDF. \
 **extract-msg** : pour lire les fichier eml et msg. \
 
-Installation des dépendances : \
+### Installation des dépendances : \
 Pour les bibliothèques intégrées comme sqlite3, locale, datetime, os, et webbrowser, il n'y a pas besoin d'installation supplémentaire. \
 Cependant, il faudra installer tkcalendar s'il n'est pas déjà disponible dans l'environnement. \
 
@@ -42,4 +42,5 @@ Cependant, il faudra installer tkcalendar s'il n'est pas déjà disponible dans 
 **Installation de Reportlab : pip install Reportlab**
 **Installation de extract-msg : pip install extract-msg**
 
-IDE : Thonny
+IDE : Thonny - https://thonny.org/
+Discord : https://discord.gg/MFk2kUhD
