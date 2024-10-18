@@ -8,9 +8,9 @@ Créer principalement pour le suivis des activités de maintenance d'un ou plusi
 **- 00** : Registre sert à archiver des activité et événements avec liaison de fichiers. \
 **- 01** : P2-commande sert à suivre et archiver ses commandes avec liaisons de fichiers. \
 **- 02** : P5-travaux sert à suivre les devis avec archivage des documents avec liaisons de fichiers. \
-**- 03** à pour but de regrouper divers petites applications html autonomes (pour la compatibilité avec avec les supports mobiles) permettant de créer des rapports techniques simples.
-**- 04** : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes.\
-**- 05** : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes".
+**- 03** à pour but de regrouper divers petites applications html autonomes (pour la compatibilité avec avec les supports mobiles) permettant de créer des rapports techniques simples. \
+**- 04** : Archives-mails sert à stocker des fichiers eml et msg avec la possibilité de lire les mails et les pièces jointes. \
+**- 05** : Archivision sert à créer des comptes rendu basé sur les images, avec l'ajout de repères et une architecture type "poupées russes". \
 **- Archiviste.py** :  sert à manipuler des fichiers pour les renommer selon une nomenclatures. \
 
 ### Les dépendances nécessaires pour exécuter le code sont :
