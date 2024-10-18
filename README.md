@@ -29,7 +29,7 @@ messagebox (partie de tkinter) : Utilisé pour afficher des boîtes de message (
 Flask : utiliser pour le serveur webhook. \
 Request : utiliser pour envoyer des données via webhook. \
 Pillow : pour ajouter des repères sur un canva. \
-Reportlab : pour la création de documents PDF. \
+Reportlab : pour la création de documents PDF.
 
 Installation des dépendances : \
 Pour les bibliothèques intégrées comme sqlite3, locale, datetime, os, et webbrowser, il n'y a pas besoin d'installation supplémentaire. \
