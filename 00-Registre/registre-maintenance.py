@@ -326,7 +326,7 @@ class MainApp(tk.Tk):
 
         # Description riche
         ttk.Label(self.right_frame, text="Description").pack(anchor=tk.W)
-        self.description_text = tk.Text(self.right_frame, height=10)
+        self.description_text = tk.Text(self.right_frame, height=5)
         self.description_text.pack(fill=tk.X)
 
         # Champs Terminé et Temps passé (après Description)
@@ -402,7 +402,7 @@ class MainApp(tk.Tk):
         selected_item = self.event_list.selection()
         if selected_item:
             event = self.event_list.item(selected_item, 'values')
-            attachments = event[7]  # Pièce jointe est à l'indice 7
+            attachments = event[8]  # Pièce jointe est à l'indice 8
             if attachments and attachments != "None":
                 for attachment in attachments.split(','):
                     filepath = os.path.join(ATTACHMENTS_DIR, attachment)
@@ -552,7 +552,7 @@ class MainApp(tk.Tk):
             self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            total_time_spent += event[7] if event[7] else 0
+            total_time_spent += float(event[7]) if event[7] else 0
 
         self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
@@ -588,7 +588,7 @@ class MainApp(tk.Tk):
             self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            total_time_spent += event[7] if event[7] else 0
+            total_time_spent += float(event[7].replace(',', '.')) if event[7] else 0
 
         self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
