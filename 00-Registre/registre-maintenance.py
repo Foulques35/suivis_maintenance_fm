@@ -10,10 +10,13 @@ import webbrowser
 # Configuration de la locale pour obtenir les jours de la semaine en français
 locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
 
-# Chemin vers la base de données SQLite
-DB_PATH = "events.db"
-ATTACHMENTS_DIR = "attachments"
-CONFIG_PATH = "config.txt"  # Chemin du fichier de configuration pour les listes de choix
+# Chemin dynamique basé sur l'emplacement du fichier Python
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Chemin vers la base de données SQLite (relatif à l'emplacement du script)
+DB_PATH = os.path.join(BASE_DIR, "events.db")
+ATTACHMENTS_DIR = os.path.join(BASE_DIR, "attachments")
+CONFIG_PATH = os.path.join(BASE_DIR, "config.txt")  # Chemin du fichier de configuration
 
 # Lecture du fichier de configuration pour les listes de choix uniques
 def load_config():
@@ -63,7 +66,7 @@ class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("Main Courante")
+        self.title("Projet Archiviste - registre")
         self.geometry("1280x800")
 
         # Charger la configuration pour les listes de choix uniques
@@ -101,26 +104,54 @@ class MainApp(tk.Tk):
         search_frame = ttk.Frame(self.left_frame)
         search_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        # Barre de recherche pour Nom
-        ttk.Label(search_frame, text="Nom").pack(side=tk.LEFT, padx=5)
-        self.search_var = tk.StringVar()
-        search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
-        search_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        search_entry.bind("<KeyRelease>", self.search_event)
+        # Première ligne de recherche : Date, Site, Nature
+        first_line_search_frame = ttk.Frame(search_frame)
+        first_line_search_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Barre de recherche pour Date
+        ttk.Label(first_line_search_frame, text="Date").pack(side=tk.LEFT, padx=5)
+        self.search_date_var = tk.StringVar()
+        search_date_entry = ttk.Entry(first_line_search_frame, textvariable=self.search_date_var)
+        search_date_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Barre de recherche pour Site
+        ttk.Label(first_line_search_frame, text="Site").pack(side=tk.LEFT, padx=5)
+        self.search_site_var = tk.StringVar()
+        search_site_entry = ttk.Entry(first_line_search_frame, textvariable=self.search_site_var)
+        search_site_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Barre de recherche pour Nature
+        ttk.Label(first_line_search_frame, text="Nature").pack(side=tk.LEFT, padx=5)
+        self.search_nature_var = tk.StringVar()
+        search_nature_entry = ttk.Entry(first_line_search_frame, textvariable=self.search_nature_var)
+        search_nature_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Deuxième ligne de recherche : Événement, Description, Terminé
+        second_line_search_frame = ttk.Frame(search_frame)
+        second_line_search_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Barre de recherche pour Événement
+        ttk.Label(second_line_search_frame, text="Événement").pack(side=tk.LEFT, padx=5)
+        self.search_name_var = tk.StringVar()
+        search_name_entry = ttk.Entry(second_line_search_frame, textvariable=self.search_name_var)
+        search_name_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Barre de recherche pour Description
-        ttk.Label(search_frame, text="Description").pack(side=tk.LEFT, padx=5)
+        ttk.Label(second_line_search_frame, text="Description").pack(side=tk.LEFT, padx=5)
         self.search_desc_var = tk.StringVar()
-        search_desc_entry = ttk.Entry(search_frame, textvariable=self.search_desc_var)
+        search_desc_entry = ttk.Entry(second_line_search_frame, textvariable=self.search_desc_var)
         search_desc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        search_desc_entry.bind("<KeyRelease>", self.search_event)
 
         # Barre de recherche pour Terminé
-        ttk.Label(search_frame, text="Terminé").pack(side=tk.LEFT, padx=5)
+        ttk.Label(second_line_search_frame, text="Terminé").pack(side=tk.LEFT, padx=5)
         self.search_finished_var = tk.StringVar()
-        search_finished_entry = ttk.Entry(search_frame, textvariable=self.search_finished_var)
+        search_finished_entry = ttk.Entry(second_line_search_frame, textvariable=self.search_finished_var)
         search_finished_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        search_finished_entry.bind("<KeyRelease>", self.search_event)
+
+        # Bouton Rechercher
+        ttk.Button(second_line_search_frame, text="Rechercher", command=self.search_events).pack(side=tk.LEFT, padx=5)
+
+
 
         # Filtre des dates
         ttk.Label(self.left_frame, text="Filtrer par Date").pack(anchor=tk.W)
@@ -139,7 +170,7 @@ class MainApp(tk.Tk):
         self.event_list = ttk.Treeview(self.left_frame, columns=(
             "date", "end_date", "site", "nature", "name", "description", "finished", "time_spent", "attachments"),
             show="headings")
-        
+
         # Configuration des colonnes
         self.event_list.heading("date", text="Date", command=lambda: self.sort_column("date", False))
         self.event_list.heading("end_date", text="Date de Fin", command=lambda: self.sort_column("end_date", False))
@@ -402,7 +433,7 @@ class MainApp(tk.Tk):
         selected_item = self.event_list.selection()
         if selected_item:
             event = self.event_list.item(selected_item, 'values')
-            attachments = event[8]  # Pièce jointe est à l'indice 8
+            attachments = event[8]  # Pièce jointe est à l'indice 7
             if attachments and attachments != "None":
                 for attachment in attachments.split(','):
                     filepath = os.path.join(ATTACHMENTS_DIR, attachment)
@@ -552,25 +583,40 @@ class MainApp(tk.Tk):
             self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            total_time_spent += float(event[7]) if event[7] else 0
+            total_time_spent += float(str(event[7]).replace(',', '.')) if event[7] else 0
 
         self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
 
-    def search_event(self, event):
-        """Rechercher un événement par nom, description, et champ terminé"""
-        search_text = self.search_var.get().lower()
-        search_desc_text = self.search_desc_var.get().lower()
-        search_finished_text = self.search_finished_var.get().lower()
-
+    def search_events(self):
+        """Rechercher des événements basés sur les champs de recherche"""
         self.event_list.delete(*self.event_list.get_children())
 
         conn = sqlite3.connect(DB_PATH)
-        query = "SELECT id, date, end_date, site, nature, name, description, time_spent, attachments, finished FROM events WHERE LOWER(name) LIKE ? AND LOWER(description) LIKE ?"
-        params = ['%' + search_text + '%', '%' + search_desc_text + '%']
+        query = """
+            SELECT id, date, end_date, site, nature, name, description, time_spent, attachments, finished
+            FROM events WHERE 1=1
+        """
+        params = []
 
-        if search_finished_text in ["oui", "non"]:
-            finished_value = 1 if search_finished_text == "oui" else 0
+        # Ajout des conditions pour chaque champ de recherche
+        if self.search_date_var.get():
+            query += " AND date LIKE ?"
+            params.append('%' + self.search_date_var.get() + '%')
+        if self.search_site_var.get():
+            query += " AND site LIKE ?"
+            params.append('%' + self.search_site_var.get() + '%')
+        if self.search_nature_var.get():
+            query += " AND nature LIKE ?"
+            params.append('%' + self.search_nature_var.get() + '%')
+        if self.search_name_var.get():
+            query += " AND name LIKE ?"
+            params.append('%' + self.search_name_var.get() + '%')
+        if self.search_desc_var.get():
+            query += " AND description LIKE ?"
+            params.append('%' + self.search_desc_var.get() + '%')
+        if self.search_finished_var.get().lower() in ["oui", "non"]:
+            finished_value = 1 if self.search_finished_var.get().lower() == "oui" else 0
             query += " AND finished = ?"
             params.append(finished_value)
 
@@ -685,3 +731,4 @@ class MainApp(tk.Tk):
 if __name__ == "__main__":
     app = MainApp()
     app.mainloop()
+
