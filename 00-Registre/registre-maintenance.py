@@ -499,7 +499,8 @@ class MainApp(tk.Tk):
         conn.close()
 
         self.reset_form()
-        self.load_events()
+        self.load_events()  # Recharge les événements
+        self.apply_date_filter()  # Réapplique le filtre actif
         messagebox.showinfo("Succès", "Événement sauvegardé avec succès")
 
     def create_new_event(self):
@@ -731,4 +732,3 @@ class MainApp(tk.Tk):
 if __name__ == "__main__":
     app = MainApp()
     app.mainloop()
-
