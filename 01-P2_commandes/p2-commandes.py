@@ -136,37 +136,41 @@ class CommandeApp(tk.Tk):
 
     def create_left_panel(self):
         """Créer les champs dans le volet gauche."""
-        search_frame = ttk.Frame(self.left_frame)
-        search_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Première ligne de recherche avec Compte, Année, Fournisseur, Numéro BDC
+        search_frame_1 = ttk.Frame(self.left_frame)
+        search_frame_1.pack(fill=tk.X, padx=10, pady=10)
 
-        # Barre de recherche pour les différents champs
-        ttk.Label(search_frame, text="Compte").pack(side=tk.LEFT, padx=5)
+        ttk.Label(search_frame_1, text="Compte").pack(side=tk.LEFT, padx=5)
         self.search_compte_var = tk.StringVar()
-        compte_entry = ttk.Entry(search_frame, textvariable=self.search_compte_var)
+        compte_entry = ttk.Entry(search_frame_1, textvariable=self.search_compte_var)
         compte_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Label(search_frame, text="Année").pack(side=tk.LEFT, padx=5)
+        ttk.Label(search_frame_1, text="Année").pack(side=tk.LEFT, padx=5)
         self.search_annee_var = tk.StringVar()
-        annee_entry = ttk.Entry(search_frame, textvariable=self.search_annee_var)
+        annee_entry = ttk.Entry(search_frame_1, textvariable=self.search_annee_var)
         annee_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Label(search_frame, text="Fournisseur").pack(side=tk.LEFT, padx=5)
+        ttk.Label(search_frame_1, text="Fournisseur").pack(side=tk.LEFT, padx=5)
         self.search_fournisseur_var = tk.StringVar()
-        fournisseur_entry = ttk.Entry(search_frame, textvariable=self.search_fournisseur_var)
+        fournisseur_entry = ttk.Entry(search_frame_1, textvariable=self.search_fournisseur_var)
         fournisseur_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Label(search_frame, text="Numéro BDC").pack(side=tk.LEFT, padx=5)
+        ttk.Label(search_frame_1, text="Numéro BDC").pack(side=tk.LEFT, padx=5)
         self.search_bdc_var = tk.StringVar()
-        bdc_entry = ttk.Entry(search_frame, textvariable=self.search_bdc_var)
+        bdc_entry = ttk.Entry(search_frame_1, textvariable=self.search_bdc_var)
         bdc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Label(search_frame, text="Type Commande").pack(side=tk.LEFT, padx=5)
+        # Deuxième ligne de recherche avec Type Commande, Rechercher et Exporter
+        search_frame_2 = ttk.Frame(self.left_frame)
+        search_frame_2.pack(fill=tk.X, padx=10, pady=10)
+
+        ttk.Label(search_frame_2, text="Type Commande").pack(side=tk.LEFT, padx=5)
         self.search_type_var = tk.StringVar()
-        type_entry = ttk.Combobox(search_frame, textvariable=self.search_type_var, values=self.types_commande)
+        type_entry = ttk.Combobox(search_frame_2, textvariable=self.search_type_var, values=self.types_commande)
         type_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        ttk.Button(search_frame, text="Rechercher", command=self.search_commandes).pack(side=tk.LEFT, padx=5)
-        ttk.Button(search_frame, text="Exporter", command=self.export_to_text).pack(side=tk.LEFT, padx=5)
+        ttk.Button(search_frame_2, text="Rechercher", command=self.search_commandes).pack(side=tk.LEFT, padx=5)
+        ttk.Button(search_frame_2, text="Exporter", command=self.export_to_text).pack(side=tk.LEFT, padx=5)
 
         # Création de la Treeview
         self.commandes_list = ttk.Treeview(self.left_frame, columns=(
@@ -177,7 +181,7 @@ class CommandeApp(tk.Tk):
         for col in self.commandes_list["columns"]:
             self.commandes_list.heading(col, text=col.capitalize(), command=lambda c=col: self.sort_column(c, False))
             self.commandes_list.column(col, anchor=tk.W, width=120)  # Ajuster la largeur des colonnes
-        
+    
         self.commandes_list.pack(fill=tk.BOTH, expand=1)
 
         self.commandes_list.bind("<<TreeviewSelect>>", self.load_selected_commande)
@@ -515,6 +519,7 @@ class CommandeApp(tk.Tk):
             conn.close()
 
         self.load_commandes()
+        self.search_commandes()
         self.clear_form()
 
         # Envoyer une notification webhook si "Livrée" est cochée
@@ -661,4 +666,3 @@ if __name__ == "__main__":
     threading.Thread(target=app.run, kwargs={'port': 5000}, daemon=True).start()  # Démarrer Flask en arrière-plan
     app = CommandeApp()  # Créer l'application de commande
     app.mainloop()  # Lancer l'application Tkinter
-
