@@ -441,6 +441,7 @@ class CommandeApp(tk.Tk):
 
         conn.close()
         self.load_commandes()
+        seil.search_commandes()
         self.clear_form()
 
     def copy_commande(self):
