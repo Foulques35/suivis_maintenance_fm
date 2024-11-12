@@ -151,15 +151,13 @@ class MainApp(tk.Tk):
         # Bouton Rechercher
         ttk.Button(second_line_search_frame, text="Rechercher", command=self.search_events).pack(side=tk.LEFT, padx=5)
 
-
-
         # Filtre des dates
         ttk.Label(self.left_frame, text="Filtrer par Date").pack(anchor=tk.W)
         self.filter_var = tk.StringVar()
         self.date_filter_combobox = ttk.Combobox(self.left_frame, textvariable=self.filter_var)
         self.date_filter_combobox['values'] = [
-            "Pas de filtre", "Aujourd'hui", "Cette semaine", "Semaine prochaine", "Ce mois-ci", "Mois prochain",
-            "Mois précédent", "Cette année", "Année dernière"
+            "Pas de filtre", "Hier", "Aujourd'hui", "Demain", "Semaine dernière", "Cette semaine", "Semaine prochaine", "Ce mois-ci", "Mois prochain",
+            "Mois précédent", "Cette année", "Année dernière", "Année suivante"
         ]
         self.date_filter_combobox.current(0)
         self.date_filter_combobox.pack(fill=tk.X)
@@ -311,8 +309,9 @@ class MainApp(tk.Tk):
 
         # Boutons de sélection rapide de la date
         ttk.Button(date_buttons_frame, text="Aujourd'hui", command=self.set_today).pack(side=tk.LEFT, padx=5)
-        ttk.Button(date_buttons_frame, text="Semaine Prochaine", command=self.set_next_week).pack(side=tk.LEFT, padx=5)
-        ttk.Button(date_buttons_frame, text="Mois Prochain", command=self.set_next_month).pack(side=tk.LEFT, padx=5)
+        ttk.Button(date_buttons_frame, text="Demain", command=self.set_tommorow).pack(side=tk.LEFT, padx=5)
+        ttk.Button(date_buttons_frame, text="Semaine Pro.", command=self.set_next_week).pack(side=tk.LEFT, padx=5)
+        ttk.Button(date_buttons_frame, text="Mois Pro.", command=self.set_next_month).pack(side=tk.LEFT, padx=5)
 
         # Date de fin (nouvelle ligne)
         ttk.Label(self.right_frame, text="Date de Fin").pack(anchor=tk.W)
@@ -322,9 +321,10 @@ class MainApp(tk.Tk):
         # Boutons de sélection rapide pour Date de Fin
         end_date_buttons_frame = ttk.Frame(self.right_frame)
         end_date_buttons_frame.pack(anchor=tk.W, pady=5)
-        ttk.Button(end_date_buttons_frame, text="Aujourd'hui (Fin)", command=self.set_end_today).pack(side=tk.LEFT, padx=5)
-        ttk.Button(end_date_buttons_frame, text="Semaine Prochaine (Fin)", command=self.set_end_next_week).pack(side=tk.LEFT, padx=5)
-        ttk.Button(end_date_buttons_frame, text="Mois Prochain (Fin)", command=self.set_end_next_month).pack(side=tk.LEFT, padx=5)
+        ttk.Button(end_date_buttons_frame, text="Aujourd'hui", command=self.set_end_today).pack(side=tk.LEFT, padx=5)
+        ttk.Button(end_date_buttons_frame, text="Demain", command=self.set_end_tommorow).pack(side=tk.LEFT, padx=5)
+        ttk.Button(end_date_buttons_frame, text="Semaine Pro.", command=self.set_end_next_week).pack(side=tk.LEFT, padx=5)
+        ttk.Button(end_date_buttons_frame, text="Mois Pro.", command=self.set_end_next_month).pack(side=tk.LEFT, padx=5)
 
         # Frame pour les boutons Sauvegarder, Créer Nouveau, et Supprimer l'Événement
         action_buttons_frame = ttk.Frame(self.right_frame)
@@ -392,6 +392,9 @@ class MainApp(tk.Tk):
 
     def set_today(self):
         self.date_entry.set_date(datetime.now())
+        
+    def set_tommorow(self):
+        self.date_entry.set_date(datetime.now()  + timedelta(days=1))
 
     def set_next_week(self):
         self.date_entry.set_date(datetime.now() + timedelta(weeks=1))
@@ -401,6 +404,9 @@ class MainApp(tk.Tk):
 
     def set_end_today(self):
         self.end_date_entry.set_date(datetime.now())
+        
+    def set_end_tommorow(self):
+        self.end_date_entry.set_date(datetime.now() + timedelta(days=1))
 
     def set_end_next_week(self):
         self.end_date_entry.set_date(datetime.now() + timedelta(weeks=1))
@@ -647,8 +653,15 @@ class MainApp(tk.Tk):
 
         if filter_choice == "Aujourd'hui":
             start_date = end_date = today
+        elif filter_choice == "Demain":
+            start_date = end_date = today + timedelta(days=1)
+        elif filter_choice == "Hier":
+            start_date = end_date = today - timedelta(days=1)
         elif filter_choice == "Cette semaine":
             start_date = today - timedelta(days=today.weekday())
+            end_date = start_date + timedelta(days=6)
+        elif filter_choice == "Semaine dernière":
+            start_date = today - timedelta(days=today.weekday() + 7)
             end_date = start_date + timedelta(days=6)
         elif filter_choice == "Semaine prochaine":
             start_date = today + timedelta(days=7 - today.weekday())
@@ -669,10 +682,15 @@ class MainApp(tk.Tk):
         elif filter_choice == "Année dernière":
             start_date = today.replace(year=today.year - 1, month=1, day=1)
             end_date = today.replace(year=today.year - 1, month=12, day=31)
+        elif filter_choice == "Année suivante":
+            start_date = today.replace(year=today.year + 1, month=1, day=1)
+            end_date = today.replace(year=today.year + 1, month=12, day=31)
+            
         else:
             start_date = end_date = None
 
         self.load_filtered_events(start_date, end_date)
+
 
     def load_filtered_events(self, start_date, end_date):
         """Charger les événements en fonction du filtre de dates"""
