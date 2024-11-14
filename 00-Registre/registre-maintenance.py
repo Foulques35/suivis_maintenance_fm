@@ -184,8 +184,8 @@ class MainApp(tk.Tk):
         self.event_list.bind("<ButtonRelease-1>", self.load_event_details)
 
         # Étiquette pour afficher la somme du "Temps Passé"
-        self.time_spent_sum_label = ttk.Label(self.left_frame, text="Total Temps Passé : 0")
-        self.time_spent_sum_label.pack(anchor=tk.W, pady=10)
+        #self.time_spent_sum_label = ttk.Label(self.left_frame, text="Total Temps Passé : 0")
+        #self.time_spent_sum_label.pack(anchor=tk.W, pady=10)
 
         self.load_events()
 
@@ -592,7 +592,7 @@ class MainApp(tk.Tk):
 
             total_time_spent += float(str(event[7]).replace(',', '.')) if event[7] else 0
 
-        self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
+        #self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
 
     def search_events(self):
@@ -643,7 +643,7 @@ class MainApp(tk.Tk):
 
             total_time_spent += float(event[7].replace(',', '.')) if event[7] else 0
 
-        self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
+        #self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
 
     def apply_date_filter(self, event=None):
@@ -717,9 +717,13 @@ class MainApp(tk.Tk):
             self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            total_time_spent += event[7] if event[7] else 0
+        try:
+            total_time_spent += float(event[7])
+        except ValueError:
+        # Gérer l'erreur (par exemple, ignorer la valeur ou définir une valeur par défaut)
+            pass
 
-        self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
+        #self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
 
     def sort_column(self, col, reverse):
