@@ -8,6 +8,7 @@ from flask import Flask, request
 import threading
 import logging  # Pour la journalisation
 from pathlib import Path
+import subprocess
 
 # Configuration de la journalisation
 logging.basicConfig(filename='log.txt', level=logging.DEBUG, 
@@ -133,6 +134,20 @@ class CommandeApp(tk.Tk):
 
         # Ajouter un bouton Quitter
         ttk.Button(self, text="Quitter", command=self.quit_app).pack(side=tk.BOTTOM, pady=10)
+
+        # Ajouter le bouton pour lancer `archiviste.py`
+        self.add_launch_archiviste_button()
+        
+    def add_launch_archiviste_button(self):
+        """Ajouter un bouton pour ouvrir archiviste.py."""
+        ttk.Button(self.right_frame, text="Ouvrir Archiviste", command=self.launch_archiviste).pack(pady=10)
+
+    def launch_archiviste(self):
+        """Lancer le script `archiviste.py`."""
+        try:
+            subprocess.Popen(["python", "archiviste.py"])
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de lancer Archiviste : {e}")
 
     def create_left_panel(self):
         """Créer les champs dans le volet gauche."""
