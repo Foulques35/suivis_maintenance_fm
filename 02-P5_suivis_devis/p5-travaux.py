@@ -4,6 +4,7 @@ from pathlib import Path
 import sqlite3
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+import subprocess
 
 # Chemin vers la base de données SQLite (relatif à l'emplacement du script)
 DB_PATH = "p5-suivis-devis.db"
@@ -176,6 +177,20 @@ class CommandeApp(tk.Tk):
         ttk.Label(self.right_frame, text="Documents").pack(anchor=tk.W)
         self.documents_listbox = tk.Listbox(self.right_frame)
         self.documents_listbox.pack(fill=tk.X, pady=5)
+        
+        # Ajouter le bouton pour lancer `archiviste.py`
+        self.add_launch_archiviste_button()
+        
+    def add_launch_archiviste_button(self):
+        """Ajouter un bouton pour ouvrir archiviste.py."""
+        ttk.Button(self.right_frame, text="Ouvrir Archiviste", command=self.launch_archiviste).pack(pady=10)
+
+    def launch_archiviste(self):
+        """Lancer le script `archiviste.py`."""
+        try:
+            subprocess.Popen(["python", "archiviste.py"])
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible de lancer Archiviste : {e}")
 
     def create_totals_section(self):
         """Créer les labels pour afficher les totaux et la Marge Brute et le Ratio de Marge."""
@@ -441,7 +456,7 @@ class CommandeApp(tk.Tk):
 
         conn.close()
         self.load_commandes()
-        seil.search_commandes()
+        self.search_commandes()
         self.clear_form()
 
     def copy_commande(self):
