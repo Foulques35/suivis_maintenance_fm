@@ -8,6 +8,9 @@ import logging
 from pathlib import Path
 import subprocess
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "db", "commandes.db")
+
 # Configuration de la journalisation
 logging.basicConfig(filename='log.txt', level=logging.DEBUG, 
                     format='%(asctime)s:%(levelname)s:%(message)s')
@@ -20,10 +23,8 @@ def create_attachments_dir():
 
 def init_db():
     """Initialiser la base de données et créer la table si elle n'existe pas."""
-    # Obtenir le répertoire courant du script
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    # Construire le chemin absolu vers le fichier de base de données
-    DB_PATH = os.path.join(BASE_DIR, "db", "commandes.db")
+    if not os.path.exists(os.path.dirname(DB_PATH)):
+        os.makedirs(os.path.dirname(DB_PATH))
 
     # Assurez-vous que le dossier 'db' existe
     if not os.path.exists(os.path.dirname(DB_PATH)):
@@ -269,8 +270,6 @@ class CommandeApp(tk.Tk):
         total_material = 0.0
         total_subcontracting = 0.0
 
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        DB_PATH = os.path.join(BASE_DIR, "db", "commandes.db")
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM commandes ORDER BY annee ASC")
@@ -328,7 +327,7 @@ class CommandeApp(tk.Tk):
         total_material = 0.0
         total_subcontracting = 0.0
 
-        conn = sqlite3.connect("commandes.db")
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         query = "SELECT * FROM commandes WHERE 1=1"
@@ -432,7 +431,7 @@ class CommandeApp(tk.Tk):
     def create_new_commande(self):
         """Créer une nouvelle commande."""
         try:
-            conn = sqlite3.connect("commandes.db")
+            conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
 
             data = (
@@ -474,8 +473,10 @@ class CommandeApp(tk.Tk):
             logging.warning("Aucune commande sélectionnée pour la modification.")
             return
 
-        commande_id = self.commandes_list.item(selected_item)["values"][0]  # Récupérer l'ID
-        conn = sqlite3.connect("commandes.db")
+        # Récupérer l'ID de la commande sélectionnée
+        commande_id = self.commandes_list.item(selected_item[0], "values")[0]
+
+        conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
 
         documents = ",".join(self.documents_listbox.get(0, tk.END))  # Obtenir les chemins des documents
@@ -521,9 +522,9 @@ class CommandeApp(tk.Tk):
                                   cout_materiel=?, cout_soustraitance=?, notes=?, numero_devis=?, numero_bdc=?, documents=? 
                               WHERE id=?""", data)
             conn.commit()
-            logging.info("Commande ID %d mise à jour avec succès.", commande_id)
+            logging.info("Commande ID %s mise à jour avec succès.", commande_id)
         except Exception as e:
-            logging.error("Erreur lors de la mise à jour de la commande ID %d : %s", commande_id, e)
+            logging.error("Erreur lors de la mise à jour de la commande ID %s : %s", commande_id, e)
             messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'enregistrement : {e}")
         finally:
             conn.close()
@@ -531,7 +532,7 @@ class CommandeApp(tk.Tk):
         self.load_commandes()
         self.search_commandes()
         self.clear_form()
-                                
+                        
     def copy_commande(self):
         """Copier la commande sélectionnée."""
         selected_item = self.commandes_list.selection()
@@ -603,7 +604,7 @@ class CommandeApp(tk.Tk):
             confirm = messagebox.askyesno("Confirmation", "Êtes-vous sûr de vouloir supprimer cette commande ?")
             if confirm:
                 commande_id = self.commandes_list.item(selected_item)["values"][0]  # Récupérer l'ID de la commande
-                conn = sqlite3.connect("commandes.db")
+                conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM commandes WHERE id=?", (commande_id,))
                 conn.commit()

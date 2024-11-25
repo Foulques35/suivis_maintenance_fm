@@ -7,7 +7,8 @@ from tkinter import ttk, messagebox, filedialog
 import subprocess
 
 # Chemin vers la base de données SQLite (relatif à l'emplacement du script)
-DB_PATH = "p5-suivis-devis.db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "db", "commandes.db")
 ATTACHMENTS_DIR = "attachments"
 
 def create_attachments_dir():
