@@ -26,8 +26,6 @@ Créer principalement pour le suivis des activités de maintenance d'un ou plusi
 **tkinter.ttk** : La sous-bibliothèque ttk de tkinter pour des widgets à l'apparence plus moderne. \
 **filedialog (partie de tkinter)** : Permet d'ouvrir des boîtes de dialogue pour la sélection de fichiers. \
 **messagebox (partie de tkinter)** : Utilisé pour afficher des boîtes de message (erreurs, avertissements, succès, etc.). \
-**Flask** : utiliser pour le serveur webhook. \
-**Request**: utiliser pour envoyer des données via webhook. \
 **Pillow** : pour ajouter des repères sur un canva. \
 **Reportlab** : pour la création de documents PDF. \
 **extract-msg** : pour lire les fichier eml et msg. \
@@ -37,7 +35,6 @@ Pour les bibliothèques intégrées comme sqlite3, locale, datetime, os, et webb
 Cependant, il faudra installer tkcalendar s'il n'est pas déjà disponible dans l'environnement. \
 
 **installation de tkcalendar : pip install tkcalendar** \
-**Installation de requests + flask : pip install Flask requests** \
 **Installation de Pillow : pip install pillow** \
 **Installation de Reportlab : pip install Reportlab** \
 **Installation de extract-msg : pip install extract-msg** 
