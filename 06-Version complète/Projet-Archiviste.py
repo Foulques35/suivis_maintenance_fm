@@ -34,11 +34,27 @@ def launch_registre():
         #messagebox.showinfo("Succès", "Registre a été lancé avec succès !")
     except Exception as e:
         messagebox.showerror("Erreur", f"Impossible de lancer Registre : {e}")
+        
+# Fonction pour lancer Mails
+def launch_mails():
+    try:
+        subprocess.Popen(["python", "mails.py"])
+        #messagebox.showinfo("Succès", "Registre a été lancé avec succès !")
+    except Exception as e:
+        messagebox.showerror("Erreur", f"Impossible de lancer Mails : {e}")
+        
+# Fonction pour lancer Archivision
+def launch_archivision():
+    try:
+        subprocess.Popen(["python", "archivision.py"])
+        #messagebox.showinfo("Succès", "Registre a été lancé avec succès !")
+    except Exception as e:
+        messagebox.showerror("Erreur", f"Impossible de lancer Archivision : {e}")
 
 # Créer la fenêtre principale
 root = tk.Tk()
 root.title("Gestionnaire de Logiciels")
-root.geometry("400x400")
+root.geometry("400x500")
 
 # Ajouter un logo (optionnel)
 try:
@@ -61,9 +77,11 @@ ttk.Button(root, text="Archiviste", command=launch_archiviste, width=20).pack(pa
 ttk.Button(root, text="P2 Commandes", command=launch_p2_commandes, width=20).pack(pady=5)
 ttk.Button(root, text="P5 Travaux", command=launch_p5_travaux, width=20).pack(pady=5)
 ttk.Button(root, text="Registre", command=launch_registre, width=20).pack(pady=5)
+ttk.Button(root, text="Archivision", command=launch_archivision, width=20).pack(pady=5)
+ttk.Button(root, text="Archives mails", command=launch_mails, width=20).pack(pady=5)
 
 # Bouton Quitter
-ttk.Button(root, text="Quitter", command=root.quit, width=20).pack(pady=20)
+# ttk.Button(root, text="Quitter", command=root.quit, width=20).pack(pady=20)
 
 # Lancer la boucle principale
 root.mainloop()
