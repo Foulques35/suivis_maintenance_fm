@@ -8,7 +8,7 @@ import subprocess
 
 # Chemin vers la base de données SQLite (relatif à l'emplacement du script)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db", "commandes.db")
+DB_PATH = os.path.join(BASE_DIR, "db", "p5-suivis-devis.db")
 ATTACHMENTS_DIR = "attachments"
 
 def create_attachments_dir():
