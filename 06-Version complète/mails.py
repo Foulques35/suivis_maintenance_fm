@@ -9,6 +9,8 @@ import webbrowser
 import tempfile
 import gc
 from email.utils import parsedate_to_datetime
+from datetime import datetime
+
 
 class EmailViewerApp:
     def __init__(self, root):
@@ -206,7 +208,7 @@ class EmailViewerApp:
                 return "Envoyé"
             elif self.user_email in msg.to:
                 return "Reçu"
-            elif self.user_email in msg.cc:
+            elif self.user_email in (msg.cc or []):
                 return "Copie"
         return "Inconnu"
 
@@ -221,15 +223,21 @@ class EmailViewerApp:
             msg = extract_msg.Message(filepath)
             date_str = msg.date
 
-        # Afficher la date brute si nous ne pouvons pas la parser
         if date_str:
             try:
-                parsed_date = parsedate_to_datetime(date_str)
+                # Vérifiez si la date est déjà un objet datetime
+                if isinstance(date_str, datetime):
+                    parsed_date = date_str
+                else:
+                    parsed_date = parsedate_to_datetime(date_str)
+
+                # Retourner la date formatée
                 return parsed_date.strftime("%Y-%m")
             except Exception as e:
                 print(f"Erreur lors de la conversion de la date '{date_str}' : {e}")
-                return f"Date brute : {date_str}"  # Afficher la date brute si elle ne peut pas être convertie
+                return f"Date brute : {date_str}"
         return "Inconnue"
+
 
     def on_email_select(self, event):
         """Affiche le contenu de l'email sélectionné et liste les pièces jointes."""
