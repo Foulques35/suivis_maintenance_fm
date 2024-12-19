@@ -37,7 +37,7 @@ def load_config():
     return config
 
 def init_db():
-    """Initialiser la base de données et créer la table si elle n'existe pas"""
+    """Initialiser la base de données et créer la table si elle n'existe pas, avec des index pour les champs recherchés"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -54,6 +54,13 @@ def init_db():
             finished INTEGER DEFAULT 0
         )
     ''')
+    # Création des index pour les champs couramment recherchés
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_date ON events(date);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_name ON events(name);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_description ON events(description);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_site ON events(site);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_nature ON events(nature);')
+
     conn.commit()
     conn.close()
 
@@ -658,22 +665,22 @@ class MainApp(tk.Tk):
         """
         params = []
 
-        # Ajout des conditions pour chaque champ de recherche
+        # Ajout des conditions pour chaque champ de recherche avec LOWER() pour insensibilité à la casse
         if self.search_date_var.get():
             query += " AND date LIKE ?"
-            params.append('%' + self.search_date_var.get() + '%')
+            params.append(f'%{self.search_date_var.get()}%')
         if self.search_site_var.get():
-            query += " AND site LIKE ?"
-            params.append('%' + self.search_site_var.get() + '%')
+            query += " AND LOWER(site) LIKE LOWER(?)"
+            params.append(f'%{self.search_site_var.get()}%')
         if self.search_nature_var.get():
-            query += " AND nature LIKE ?"
-            params.append('%' + self.search_nature_var.get() + '%')
+            query += " AND LOWER(nature) LIKE LOWER(?)"
+            params.append(f'%{self.search_nature_var.get()}%')
         if self.search_name_var.get():
-            query += " AND name LIKE ?"
-            params.append('%' + self.search_name_var.get() + '%')
+            query += " AND LOWER(name) LIKE LOWER(?)"
+            params.append(f'%{self.search_name_var.get()}%')
         if self.search_desc_var.get():
-            query += " AND description LIKE ?"
-            params.append('%' + self.search_desc_var.get() + '%')
+            query += " AND LOWER(description) LIKE LOWER(?)"
+            params.append(f'%{self.search_desc_var.get()}%')
         if self.search_finished_var.get().lower() in ["oui", "non"]:
             finished_value = 1 if self.search_finished_var.get().lower() == "oui" else 0
             query += " AND finished = ?"
@@ -693,9 +700,11 @@ class MainApp(tk.Tk):
             self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            total_time_spent += float(event[7].replace(',', '.')) if event[7] else 0
+            try:
+                total_time_spent += float(event[7])
+            except ValueError:
+                pass  # Ignorer les valeurs invalides pour `time_spent`
 
-        #self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
 
     def apply_date_filter(self, event=None):
