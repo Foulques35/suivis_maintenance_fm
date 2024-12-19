@@ -14,7 +14,7 @@ locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Chemin vers la base de données SQLite (relatif à l'emplacement du script)
-DB_PATH = os.path.join(BASE_DIR, "events.db")
+DB_PATH = os.path.join(BASE_DIR, "db/events.db")
 ATTACHMENTS_DIR = os.path.join(BASE_DIR, "attachments")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.txt")  # Chemin du fichier de configuration
 
@@ -37,7 +37,7 @@ def load_config():
     return config
 
 def init_db():
-    """Initialiser la base de données et créer la table si elle n'existe pas"""
+    """Initialiser la base de données et créer la table si elle n'existe pas, avec des index pour les champs recherchés"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''
@@ -54,6 +54,13 @@ def init_db():
             finished INTEGER DEFAULT 0
         )
     ''')
+    # Création des index pour les champs couramment recherchés
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_date ON events(date);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_name ON events(name);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_description ON events(description);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_site ON events(site);')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_nature ON events(nature);')
+
     conn.commit()
     conn.close()
 
@@ -271,21 +278,73 @@ class MainApp(tk.Tk):
         return events
 
     def export_data(self):
-        """Exporter les données filtrées dans un fichier texte"""
-        with open("Export_registre.txt", "w", encoding="utf-8") as f:
-            for row_id in self.event_list.get_children():
-                row_data = self.event_list.item(row_id, "values")
-                f.write(", ".join(row_data) + "\n")
-        messagebox.showinfo("Exportation réussie", "Les données ont été exportées dans Export_registre.txt")
+        """Exporter les données filtrées dans un fichier texte avec un nom de fichier par défaut."""
+        from datetime import datetime
+        
+        # Définir un nom de fichier par défaut basé sur la date actuelle
+        default_file_name = f"registre_export_{datetime.now().strftime('%Y%m%d')}.txt"
+        
+        # Ouvrir une boîte de dialogue pour enregistrer le fichier
+        file_path = filedialog.asksaveasfilename(
+            initialfile=default_file_name,  # Nom par défaut
+            defaultextension=".txt", 
+            filetypes=[("Text files", "*.txt")]
+        )
+        
+        if not file_path:
+            return  # Si l'utilisateur annule l'exportation
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                # Exporter les données ligne par ligne
+                for row_id in self.event_list.get_children():
+                    row_data = self.event_list.item(row_id, "values")
+                    f.write(", ".join(row_data) + "\n")
+            
+            messagebox.showinfo("Exportation réussie", f"Les données ont été exportées dans {file_path}")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'exportation : {e}")
+
 
     def export_detailed_data(self):
-        """Exporter les données filtrées avec un format détaillé"""
-        with open("Export_registre_detaillé.txt", "w", encoding="utf-8") as f:
-            for row_id in self.event_list.get_children():
-                row_data = self.event_list.item(row_id, "values")
-                description = self.get_event_description(row_data[0], row_data[4])
-                f.write(f"----\nDate: {row_data[0]}\nSite: {row_data[2]}\nNature: {row_data[3]}\nNom de l'événement: {row_data[4]}\nDescription: {row_data[5]}\nTemps passé: {row_data[7]} heures\nTerminé: {row_data[6]}\n----\n\n")
-        messagebox.showinfo("Exportation réussie", "Les données détaillées ont été exportées dans Export_registre_detaillé.txt")
+        """Exporter les données filtrées avec un format détaillé et un nom de fichier par défaut."""
+        from datetime import datetime
+
+        # Définir un nom de fichier par défaut basé sur la date actuelle
+        default_file_name = f"registre_detaillé_export_{datetime.now().strftime('%Y%m%d')}.txt"
+
+        # Ouvrir une boîte de dialogue pour enregistrer le fichier
+        file_path = filedialog.asksaveasfilename(
+            initialfile=default_file_name,  # Nom par défaut
+            defaultextension=".txt", 
+            filetypes=[("Text files", "*.txt")]
+        )
+
+        if not file_path:
+            return  # Si l'utilisateur annule l'exportation
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                # Exporter les données détaillées ligne par ligne
+                for row_id in self.event_list.get_children():
+                    row_data = self.event_list.item(row_id, "values")
+                    # Obtenir une description détaillée
+                    description = self.get_event_description(row_data[0], row_data[4])
+                    f.write(
+                        f"----\n"
+                        f"Date: {row_data[0]}\n"
+                        f"Site: {row_data[2]}\n"
+                        f"Nature: {row_data[3]}\n"
+                        f"Nom de l'événement: {row_data[4]}\n"
+                        f"Description: {description}\n"
+                        f"Temps passé: {row_data[7]} heures\n"
+                        f"Terminé: {row_data[6]}\n"
+                        f"----\n\n"
+                    )
+            messagebox.showinfo("Exportation réussie", f"Les données détaillées ont été exportées dans {file_path}")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Une erreur est survenue lors de l'exportation : {e}")
+
 
     def get_event_description(self, date, name):
         """Récupérer la description de l'événement en fonction de la date et du nom"""
@@ -357,7 +416,7 @@ class MainApp(tk.Tk):
 
         # Description riche
         ttk.Label(self.right_frame, text="Description").pack(anchor=tk.W)
-        self.description_text = tk.Text(self.right_frame, height=5)
+        self.description_text = tk.Text(self.right_frame, height=20)
         self.description_text.pack(fill=tk.X)
 
         # Champs Terminé et Temps passé (après Description)
@@ -606,22 +665,22 @@ class MainApp(tk.Tk):
         """
         params = []
 
-        # Ajout des conditions pour chaque champ de recherche
+        # Ajout des conditions pour chaque champ de recherche avec LOWER() pour insensibilité à la casse
         if self.search_date_var.get():
             query += " AND date LIKE ?"
-            params.append('%' + self.search_date_var.get() + '%')
+            params.append(f'%{self.search_date_var.get()}%')
         if self.search_site_var.get():
-            query += " AND site LIKE ?"
-            params.append('%' + self.search_site_var.get() + '%')
+            query += " AND LOWER(site) LIKE LOWER(?)"
+            params.append(f'%{self.search_site_var.get()}%')
         if self.search_nature_var.get():
-            query += " AND nature LIKE ?"
-            params.append('%' + self.search_nature_var.get() + '%')
+            query += " AND LOWER(nature) LIKE LOWER(?)"
+            params.append(f'%{self.search_nature_var.get()}%')
         if self.search_name_var.get():
-            query += " AND name LIKE ?"
-            params.append('%' + self.search_name_var.get() + '%')
+            query += " AND LOWER(name) LIKE LOWER(?)"
+            params.append(f'%{self.search_name_var.get()}%')
         if self.search_desc_var.get():
-            query += " AND description LIKE ?"
-            params.append('%' + self.search_desc_var.get() + '%')
+            query += " AND LOWER(description) LIKE LOWER(?)"
+            params.append(f'%{self.search_desc_var.get()}%')
         if self.search_finished_var.get().lower() in ["oui", "non"]:
             finished_value = 1 if self.search_finished_var.get().lower() == "oui" else 0
             query += " AND finished = ?"
@@ -641,9 +700,11 @@ class MainApp(tk.Tk):
             self.event_list.insert("", "end", values=(event_date, end_date, event[3], event[4], event[5], event[6], finished_text, event[7], event[8]), tags=(row_tag,))
             self.event_list.tag_configure("weekend", background="lightgrey")
 
-            total_time_spent += float(event[7].replace(',', '.')) if event[7] else 0
+            try:
+                total_time_spent += float(event[7])
+            except ValueError:
+                pass  # Ignorer les valeurs invalides pour `time_spent`
 
-        #self.time_spent_sum_label.config(text=f"Total Temps Passé : {total_time_spent:.2f} heures")
         conn.close()
 
     def apply_date_filter(self, event=None):
@@ -688,9 +749,8 @@ class MainApp(tk.Tk):
             
         else:
             start_date = end_date = None
-
+            
         self.load_filtered_events(start_date, end_date)
-
 
     def load_filtered_events(self, start_date, end_date):
         """Charger les événements en fonction du filtre de dates"""
