@@ -11,26 +11,19 @@ def launch_archiviste():
     except Exception as e:
         messagebox.showerror("Erreur", f"Impossible de lancer Archiviste : {e}")
 
-# Fonction pour lancer P2 Commandes
-def launch_p2_commandes():
+# Fonction pour lancer Commandes
+def launch_notebook():
     try:
-        subprocess.Popen(["python", "p2-commandes.py"])
-        #messagebox.showinfo("Succès", "P2 Commandes a été lancé avec succès !")
+        subprocess.Popen(["python", "notebook.py"])
+        #messagebox.showinfo("Succès", "Commandes a été lancé avec succès !")
     except Exception as e:
         messagebox.showerror("Erreur", f"Impossible de lancer P2 Commandes : {e}")
 
-# Fonction pour lancer P5 Travaux
-def launch_p5_travaux():
-    try:
-        subprocess.Popen(["python", "p5-travaux.py"])
-        #messagebox.showinfo("Succès", "P5 Travaux a été lancé avec succès !")
-    except Exception as e:
-        messagebox.showerror("Erreur", f"Impossible de lancer P5 Travaux : {e}")
 
 # Fonction pour lancer Registre
 def launch_registre():
     try:
-        subprocess.Popen(["python", "registre.py"])
+        subprocess.Popen(["python", "registre-V2.py"])
         #messagebox.showinfo("Succès", "Registre a été lancé avec succès !")
     except Exception as e:
         messagebox.showerror("Erreur", f"Impossible de lancer Registre : {e}")
@@ -53,7 +46,7 @@ def launch_archivision():
 
 # Créer la fenêtre principale
 root = tk.Tk()
-root.title("Gestionnaire de Logiciels")
+root.title("Projet-Archiviste")
 root.geometry("400x500")
 
 # Ajouter un logo (optionnel)
@@ -69,13 +62,12 @@ except Exception as e:
     print(f"Erreur lors du chargement du logo : {e}")
 
 # Ajouter un titre
-title_label = tk.Label(root, text="Prohet Tilia", font=("Helvetica", 16, "bold"))
+title_label = tk.Label(root, text="Projet Archiviste", font=("Helvetica", 16, "bold"))
 title_label.pack(pady=10)
 
 # Boutons pour chaque logiciel
 ttk.Button(root, text="Archiviste", command=launch_archiviste, width=20).pack(pady=5)
-ttk.Button(root, text="P2 Commandes", command=launch_p2_commandes, width=20).pack(pady=5)
-ttk.Button(root, text="P5 Travaux", command=launch_p5_travaux, width=20).pack(pady=5)
+ttk.Button(root, text="Commandes", command=launch_notebook, width=20).pack(pady=5)
 ttk.Button(root, text="Registre", command=launch_registre, width=20).pack(pady=5)
 ttk.Button(root, text="Archivision", command=launch_archivision, width=20).pack(pady=5)
 ttk.Button(root, text="Archives mails", command=launch_mails, width=20).pack(pady=5)

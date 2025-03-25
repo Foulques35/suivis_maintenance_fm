@@ -1,8 +1,0 @@
-# URL du webhook
-
-
-# Types de commande
-Type1
-Type2
-Type3
-Type4
