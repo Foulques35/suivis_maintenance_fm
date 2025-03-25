@@ -8,5 +8,5 @@ GTB - modifications
 Administratif
 
 [Site]
-Inscrire les sites
+inscrire les sites
 

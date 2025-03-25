@@ -17,100 +17,63 @@ locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
 logging.basicConfig(filename='app.log', level=logging.DEBUG, 
                     format='%(asctime)s:%(levelname)s:%(message)s')
 
-# Chemins dynamiques
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-COMMANDES_DB_PATH = os.path.join(BASE_DIR, "db", "commandes.db")
-DEVIS_DB_PATH = os.path.join(BASE_DIR, "db", "p5-suivis-devis.db")
-COMMANDES_ATTACHMENTS_DIR = "P2-Commandes"
-DEVIS_ATTACHMENTS_DIR = "P5-Devis"
+class CommandeApp(ttk.Frame):
+    def __init__(self, parent, base_dir):
+        super().__init__(parent)
+        self.base_dir = base_dir
+        self.COMMANDES_DB_PATH = os.path.join(self.base_dir, "db", "commandes.db")
+        self.COMMANDES_ATTACHMENTS_DIR = os.path.join(self.base_dir, "P2-Commandes")
+        self.types_commande = self.read_config()
+        self.init_commandes_db()
+        self.create_widgets()
 
-def create_attachments_dirs():
-    """Créer les dossiers pour les pièces jointes si nécessaire."""
-    for dir_path in [COMMANDES_ATTACHMENTS_DIR, DEVIS_ATTACHMENTS_DIR]:
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-            logging.info(f"Dossier des pièces jointes créé : {dir_path}")
+    def read_config(self):
+        """Lire le fichier de configuration pour les types de commande."""
+        types_commande = []
+        CONFIG_FILE = os.path.join(self.base_dir, "config-commande-p2.txt")
+        if not os.path.exists(CONFIG_FILE):
+            logging.error("Fichier de configuration introuvable.")
+            return []
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith("#") or not line:
+                        continue
+                    types_commande.append(line)
+            logging.info(f"Types de commande chargés : {types_commande}")
+        except Exception as e:
+            logging.error(f"Erreur de lecture du fichier de configuration : {e}")
+        return types_commande
 
-def init_commandes_db():
-    """Initialiser la base de données pour les commandes."""
-    try:
-        if not os.path.exists(os.path.dirname(COMMANDES_DB_PATH)):
-            os.makedirs(os.path.dirname(COMMANDES_DB_PATH))
-        conn = sqlite3.connect(COMMANDES_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS commandes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            annee TEXT,
-            compte TEXT,
-            type_commande TEXT,
-            commande INTEGER,
-            livree INTEGER,
-            receptionnee INTEGER,
-            fournisseur TEXT,
-            cout_materiel REAL,
-            cout_soustraitance REAL,
-            notes TEXT,
-            numero_devis TEXT,
-            numero_bdc TEXT,
-            documents TEXT
-        )''')
-        conn.commit()
-        conn.close()
-        logging.info(f"Base de données commandes initialisée : {COMMANDES_DB_PATH}")
-    except sqlite3.Error as e:
-        logging.error(f"Erreur lors de l'initialisation de commandes.db : {e}")
-
-def init_devis_db():
-    """Initialiser la base de données pour les devis."""
-    try:
-        if not os.path.exists(os.path.dirname(DEVIS_DB_PATH)):
-            os.makedirs(os.path.dirname(DEVIS_DB_PATH))
-        conn = sqlite3.connect(DEVIS_DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('''CREATE TABLE IF NOT EXISTS commandes (
+    def init_commandes_db(self):
+        """Initialiser la base de données pour les commandes."""
+        try:
+            if not os.path.exists(os.path.dirname(self.COMMANDES_DB_PATH)):
+                os.makedirs(os.path.dirname(self.COMMANDES_DB_PATH))
+            conn = sqlite3.connect(self.COMMANDES_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS commandes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                ref_devis TEXT,
+                annee TEXT,
                 compte TEXT,
-                devis_accepte INTEGER,
+                type_commande TEXT,
                 commande INTEGER,
-                livraison INTEGER,
-                reception INTEGER,
-                achats REAL,
-                vente REAL,
+                livree INTEGER,
+                receptionnee INTEGER,
+                fournisseur TEXT,
+                cout_materiel REAL,
+                cout_soustraitance REAL,
                 notes TEXT,
+                numero_devis TEXT,
+                numero_bdc TEXT,
                 documents TEXT
             )''')
-        conn.commit()
-        conn.close()
-        logging.info(f"Base de données devis initialisée : {DEVIS_DB_PATH}")
-    except sqlite3.Error as e:
-        logging.error(f"Erreur lors de l'initialisation de p5-suivis-devis.db : {e}")
-
-def read_config():
-    """Lire le fichier de configuration pour les types de commande."""
-    types_commande = []
-    CONFIG_FILE = "config-commande-p2.txt"
-    if not os.path.exists(CONFIG_FILE):
-        logging.error("Fichier de configuration introuvable.")
-        return []
-    try:
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("#") or not line:
-                    continue
-                types_commande.append(line)
-        logging.info(f"Types de commande chargés : {types_commande}")
-    except Exception as e:
-        logging.error(f"Erreur de lecture du fichier de configuration : {e}")
-    return types_commande
-
-class CommandeApp(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.types_commande = read_config()
-        init_commandes_db()
-        self.create_widgets()
+            conn.commit()
+            conn.close()
+            logging.info(f"Base de données commandes initialisée : {self.COMMANDES_DB_PATH}")
+        except sqlite3.Error as e:
+            logging.error(f"Erreur lors de l'initialisation de commandes.db : {e}")
 
     def create_widgets(self):
         main_frame = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -289,7 +252,7 @@ class CommandeApp(ttk.Frame):
             self.commandes_list.delete(*self.commandes_list.get_children())
             total_material = 0.0
             total_subcontracting = 0.0
-            conn = sqlite3.connect(COMMANDES_DB_PATH)
+            conn = sqlite3.connect(self.COMMANDES_DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM commandes ORDER BY annee ASC")
             commandes = cursor.fetchall()
@@ -305,6 +268,7 @@ class CommandeApp(ttk.Frame):
             logging.error(f"Erreur lors du chargement des commandes : {e}")
             messagebox.showerror("Erreur", f"Impossible de charger les commandes : {e}")
 
+    # Les autres méthodes restent identiques, juste utiliser self.COMMANDES_DB_PATH et self.COMMANDES_ATTACHMENTS_DIR
     def adjust_column_widths(self):
         visible_columns = ["id", "annee", "compte", "type_commande", "commande", "livree", 
                           "receptionnee", "fournisseur", "cout_materiel", "cout_soustraitance", 
@@ -357,7 +321,7 @@ class CommandeApp(ttk.Frame):
             self.commandes_list.delete(*self.commandes_list.get_children())
             total_material = 0.0
             total_subcontracting = 0.0
-            conn = sqlite3.connect(COMMANDES_DB_PATH)
+            conn = sqlite3.connect(self.COMMANDES_DB_PATH)
             cursor = conn.cursor()
             query = "SELECT * FROM commandes WHERE 1=1"
             params = []
@@ -439,7 +403,7 @@ class CommandeApp(ttk.Frame):
 
     def create_new_commande(self):
         try:
-            conn = sqlite3.connect(COMMANDES_DB_PATH)
+            conn = sqlite3.connect(self.COMMANDES_DB_PATH)
             cursor = conn.cursor()
             data = (
                 self.year_entry.get(),
@@ -473,7 +437,7 @@ class CommandeApp(ttk.Frame):
             messagebox.showwarning("Avertissement", "Veuillez sélectionner une commande à modifier.")
             return
         commande_id = self.commandes_list.item(selected_item[0], "values")[0]
-        conn = sqlite3.connect(COMMANDES_DB_PATH)
+        conn = sqlite3.connect(self.COMMANDES_DB_PATH)
         cursor = conn.cursor()
         documents = ",".join(self.documents_listbox.get(0, tk.END))
         data = (
@@ -534,7 +498,6 @@ class CommandeApp(ttk.Frame):
         year = self.year_entry.get().strip() or "Sans_Annee"
         account = self.account_entry.get().strip() or "Sans_Compte"
         supplier = self.supplier_entry.get().strip() or "Sans_Fournisseur"
-        # Nettoyer les noms pour éviter les caractères invalides dans les chemins
         year = re.sub(r'[<>:"/\\|?*]', '_', year)
         account = re.sub(r'[<>:"/\\|?*]', '_', account)
         supplier = re.sub(r'[<>:"/\\|?*]', '_', supplier)
@@ -542,8 +505,7 @@ class CommandeApp(ttk.Frame):
         for file_path in file_paths:
             if file_path:
                 file_name = os.path.basename(file_path)
-                # Créer les sous-dossiers basés sur Année, Compte et Fournisseur dans P2-Commandes
-                year_dir = os.path.join(COMMANDES_ATTACHMENTS_DIR, year)
+                year_dir = os.path.join(self.COMMANDES_ATTACHMENTS_DIR, year)
                 account_dir = os.path.join(year_dir, account)
                 supplier_dir = os.path.join(account_dir, supplier)
                 if not os.path.exists(supplier_dir):
@@ -581,7 +543,7 @@ class CommandeApp(ttk.Frame):
             confirm = messagebox.askyesno("Confirmation", "Êtes-vous sûr de vouloir supprimer cette commande ?")
             if confirm:
                 commande_id = self.commandes_list.item(selected_item)["values"][0]
-                conn = sqlite3.connect(COMMANDES_DB_PATH)
+                conn = sqlite3.connect(self.COMMANDES_DB_PATH)
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM commandes WHERE id=?", (commande_id,))
                 conn.commit()
@@ -614,10 +576,39 @@ class CommandeApp(ttk.Frame):
             messagebox.showerror("Erreur", f"Impossible de lancer Archiviste : {e}")
 
 class DevisApp(ttk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, base_dir):
         super().__init__(parent)
-        init_devis_db()
+        self.base_dir = base_dir
+        self.DEVIS_DB_PATH = os.path.join(self.base_dir, "db", "p5-suivis-devis.db")
+        self.DEVIS_ATTACHMENTS_DIR = os.path.join(self.base_dir, "P5-Devis")
+        self.init_devis_db()
         self.create_widgets()
+
+    def init_devis_db(self):
+        """Initialiser la base de données pour les devis."""
+        try:
+            if not os.path.exists(os.path.dirname(self.DEVIS_DB_PATH)):
+                os.makedirs(os.path.dirname(self.DEVIS_DB_PATH))
+            conn = sqlite3.connect(self.DEVIS_DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('''CREATE TABLE IF NOT EXISTS commandes (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ref_devis TEXT,
+                    compte TEXT,
+                    devis_accepte INTEGER,
+                    commande INTEGER,
+                    livraison INTEGER,
+                    reception INTEGER,
+                    achats REAL,
+                    vente REAL,
+                    notes TEXT,
+                    documents TEXT
+                )''')
+            conn.commit()
+            conn.close()
+            logging.info(f"Base de données devis initialisée : {self.DEVIS_DB_PATH}")
+        except sqlite3.Error as e:
+            logging.error(f"Erreur lors de l'initialisation de p5-suivis-devis.db : {e}")
 
     def create_widgets(self):
         main_frame = ttk.PanedWindow(self, orient=tk.HORIZONTAL)
@@ -775,7 +766,7 @@ class DevisApp(ttk.Frame):
             self.commandes_list.delete(*self.commandes_list.get_children())
             total_material = 0.0
             total_subcontracting = 0.0
-            conn = sqlite3.connect(DEVIS_DB_PATH)
+            conn = sqlite3.connect(self.DEVIS_DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM commandes ORDER BY ref_devis ASC")
             commandes = cursor.fetchall()
@@ -794,6 +785,7 @@ class DevisApp(ttk.Frame):
             logging.error(f"Erreur lors du chargement des devis : {e}")
             messagebox.showerror("Erreur", f"Impossible de charger les devis : {e}")
 
+    # Les autres méthodes restent identiques, juste utiliser self.DEVIS_DB_PATH et self.DEVIS_ATTACHMENTS_DIR
     def adjust_column_widths(self):
         visible_columns = ["id", "ref_devis", "compte", "devis_accepte", "commande", "livraison", 
                           "reception", "achats", "vente", "notes"]
@@ -839,7 +831,7 @@ class DevisApp(ttk.Frame):
             self.commandes_list.delete(*self.commandes_list.get_children())
             total_material = 0.0
             total_subcontracting = 0.0
-            conn = sqlite3.connect(DEVIS_DB_PATH)
+            conn = sqlite3.connect(self.DEVIS_DB_PATH)
             cursor = conn.cursor()
             query = "SELECT * FROM commandes WHERE 1=1"
             params = []
@@ -919,7 +911,7 @@ class DevisApp(ttk.Frame):
 
     def create_new_commande(self):
         try:
-            conn = sqlite3.connect(DEVIS_DB_PATH)
+            conn = sqlite3.connect(self.DEVIS_DB_PATH)
             cursor = conn.cursor()
             if not self.year_entry.get() or not self.account_entry.get():
                 messagebox.showwarning("Avertissement", "Veuillez remplir tous les champs obligatoires.")
@@ -956,7 +948,7 @@ class DevisApp(ttk.Frame):
             return
         commande_id = self.commandes_list.item(selected_item)["values"][0]
         try:
-            conn = sqlite3.connect(DEVIS_DB_PATH)
+            conn = sqlite3.connect(self.DEVIS_DB_PATH)
             cursor = conn.cursor()
             if not self.year_entry.get() or not self.account_entry.get():
                 messagebox.showwarning("Avertissement", "Veuillez remplir tous les champs obligatoires.")
@@ -1013,15 +1005,13 @@ class DevisApp(ttk.Frame):
         file_paths = filedialog.askopenfilenames(title="Sélectionner des documents", initialdir=os.getcwd())
         ref_devis = self.year_entry.get().strip() or "Sans_Ref_Devis"
         account = self.account_entry.get().strip() or "Sans_Compte"
-        # Nettoyer le nom pour éviter les caractères invalides dans les chemins
         ref_devis = re.sub(r'[<>:"/\\|?*]', '_', ref_devis)
         account = re.sub(r'[<>:"/\\|?*]', '_', account)
         
         for file_path in file_paths:
             if file_path:
                 file_name = os.path.basename(file_path)
-                # Créer le sous-dossier basé sur Compte et Ref. devis dans P5-Devis
-                account_dir = os.path.join(DEVIS_ATTACHMENTS_DIR, account)
+                account_dir = os.path.join(self.DEVIS_ATTACHMENTS_DIR, account)
                 devis_dir = os.path.join(account_dir, ref_devis)
                 if not os.path.exists(devis_dir):
                     os.makedirs(devis_dir)
@@ -1059,7 +1049,7 @@ class DevisApp(ttk.Frame):
             if confirm:
                 commande_id = self.commandes_list.item(selected_item)["values"][0]
                 try:
-                    conn = sqlite3.connect(DEVIS_DB_PATH)
+                    conn = sqlite3.connect(self.DEVIS_DB_PATH)
                     cursor = conn.cursor()
                     cursor.execute("DELETE FROM commandes WHERE id=?", (commande_id,))
                     conn.commit()
@@ -1103,16 +1093,25 @@ class MainApp(tk.Tk):
         style.configure("Treeview.Heading", font=("Helvetica", 10, "bold"))
         style.configure("Treeview", rowheight=25)
 
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.create_attachments_dirs(base_dir)
+
         notebook = ttk.Notebook(self)
         notebook.pack(fill=tk.BOTH, expand=True)
 
-        commandes_tab = CommandeApp(notebook)
-        devis_tab = DevisApp(notebook)
+        commandes_tab = CommandeApp(notebook, base_dir)
+        devis_tab = DevisApp(notebook, base_dir)
 
         notebook.add(commandes_tab, text="Suivi des Commandes")
         notebook.add(devis_tab, text="Suivi des Devis")
 
+    def create_attachments_dirs(self, base_dir):
+        """Créer les dossiers pour les pièces jointes si nécessaire."""
+        for dir_path in [os.path.join(base_dir, "P2-Commandes"), os.path.join(base_dir, "P5-Devis")]:
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+                logging.info(f"Dossier des pièces jointes créé : {dir_path}")
+
 if __name__ == "__main__":
-    create_attachments_dirs()  # Créer les dossiers P2-Commandes et P5-Devis au démarrage
     app = MainApp()
     app.mainloop()

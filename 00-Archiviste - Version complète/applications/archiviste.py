@@ -10,66 +10,24 @@ import webbrowser
 # Configuration de la locale pour les jours en français
 locale.setlocale(locale.LC_TIME, 'fr_FR.UTF-8')
 
-# Chemins dynamiques
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db/events.db")
-ATTACHMENTS_DIR = os.path.join(BASE_DIR, "attachments")
-CONFIG_PATH = os.path.join(BASE_DIR, "config.txt")
+class EventRegisterApp(tk.Frame):
+    def __init__(self, parent, base_dir):
+        super().__init__(parent)
+        self.base_dir = base_dir
+        self.DB_PATH = os.path.join(self.base_dir, "db/events.db")
+        self.ATTACHMENTS_DIR = os.path.join(self.base_dir, "attachments")
+        self.CONFIG_PATH = os.path.join(self.base_dir, "config.txt")
 
-# Charger la configuration
-def load_config():
-    config = {"Nature": [], "Site": []}
-    current_section = None
-    if os.path.exists(CONFIG_PATH):
-        with open(CONFIG_PATH, "r", encoding="utf-8") as file:
-            for line in file:
-                line = line.strip()
-                if line.startswith("[") and line.endswith("]"):
-                    current_section = line[1:-1]
-                elif line and current_section in config:
-                    config[current_section].append(line)
-    return config
+        # Initialisation des configurations et dossiers
+        self.config = self.load_config()
+        self.init_db()
+        self.create_attachments_dir()
+        self.attachments = []
 
-# Initialisation et mise à jour de la base de données
-def init_db():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, end_date TEXT, name TEXT NOT NULL,
-        time_spent REAL, nature TEXT, site TEXT, description TEXT, attachments TEXT, finished INTEGER DEFAULT 0,
-        recurrent INTEGER DEFAULT 0, periodicity TEXT
-    )''')
-    try:
-        cursor.execute("ALTER TABLE events ADD COLUMN recurrent INTEGER DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass
-    try:
-        cursor.execute("ALTER TABLE events ADD COLUMN periodicity TEXT")
-    except sqlite3.OperationalError:
-        pass
-    for col in ["date", "name", "description", "site", "nature"]:
-        cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{col} ON events({col});')
-    conn.commit()
-    conn.close()
-
-def create_attachments_dir():
-    if not os.path.exists(ATTACHMENTS_DIR):
-        os.makedirs(ATTACHMENTS_DIR)
-
-class MainApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.title("Projet Archiviste - Registre")
-        self.geometry("1400x1000")
+        # Configuration de l'interface
         self.configure(bg="white")
-
         style = ttk.Style(self)
         style.theme_use("clam")
-
-        self.config = load_config()
-        init_db()
-        create_attachments_dir()
-        self.attachments = []
 
         main_frame = ttk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
@@ -136,6 +94,45 @@ class MainApp(tk.Tk):
         self.create_right_panel()
         self.load_events()
         self.selected_event_id = None
+
+    # Méthodes utilitaires
+    def load_config(self):
+        config = {"Nature": [], "Site": []}
+        current_section = None
+        if os.path.exists(self.CONFIG_PATH):
+            with open(self.CONFIG_PATH, "r", encoding="utf-8") as file:
+                for line in file:
+                    line = line.strip()
+                    if line.startswith("[") and line.endswith("]"):
+                        current_section = line[1:-1]
+                    elif line and current_section in config:
+                        config[current_section].append(line)
+        return config
+
+    def init_db(self):
+        conn = sqlite3.connect(self.DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, end_date TEXT, name TEXT NOT NULL,
+            time_spent REAL, nature TEXT, site TEXT, description TEXT, attachments TEXT, finished INTEGER DEFAULT 0,
+            recurrent INTEGER DEFAULT 0, periodicity TEXT
+        )''')
+        try:
+            cursor.execute("ALTER TABLE events ADD COLUMN recurrent INTEGER DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            cursor.execute("ALTER TABLE events ADD COLUMN periodicity TEXT")
+        except sqlite3.OperationalError:
+            pass
+        for col in ["date", "name", "description", "site", "nature"]:
+            cursor.execute(f'CREATE INDEX IF NOT EXISTS idx_{col} ON events({col});')
+        conn.commit()
+        conn.close()
+
+    def create_attachments_dir(self):
+        if not os.path.exists(self.ATTACHMENTS_DIR):
+            os.makedirs(self.ATTACHMENTS_DIR)
 
     def add_search_field(self, frame, label, var_name):
         ttk.Label(frame, text=label).pack(side=tk.LEFT, padx=5)
@@ -241,7 +238,7 @@ class MainApp(tk.Tk):
         event_tree.column("duration", width=80, anchor="w", stretch=True)
         event_tree.pack(fill=tk.BOTH, expand=True)
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT date, end_date, name FROM events")
         events = cursor.fetchall()
@@ -276,7 +273,7 @@ class MainApp(tk.Tk):
                 values = event_tree.item(sel, "values")
                 event_name = values[0].strip()
                 selected_date = cal.get_date()
-                conn = sqlite3.connect(DB_PATH)
+                conn = sqlite3.connect(self.DB_PATH)
                 cursor = conn.cursor()
                 cursor.execute("SELECT id, end_date, site, nature, name, description, time_spent, attachments, finished FROM events WHERE date = ? AND TRIM(LOWER(REPLACE(name, ' ', ''))) LIKE LOWER(REPLACE(?, ' ', ''))", (selected_date, f"%{event_name}%"))
                 event = cursor.fetchone()
@@ -307,20 +304,16 @@ class MainApp(tk.Tk):
         window.title("Vue Planning")
         window.geometry("1400x1000")
 
-        # Utilisation d'un PanedWindow vertical pour les volets principaux
         main_paned = ttk.PanedWindow(window, orient=tk.VERTICAL)
         main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        # Frame pour le bouton "Marquer comme terminé" au-dessus des volets centraux
         button_frame = ttk.Frame(main_paned)
         main_paned.add(button_frame, weight=0)
         ttk.Button(button_frame, text="Marquer comme terminé", command=lambda: self.mark_as_finished(last_tree, non_rec_tree, rec_tree, upcoming_tree)).pack(pady=5)
 
-        # PanedWindow horizontal pour Dernière Occurrence, Événements Récurrents, et À Venir
         upper_paned = ttk.PanedWindow(main_paned, orient=tk.HORIZONTAL)
         main_paned.add(upper_paned, weight=3)
 
-        # Volet "Dernière Occurrence"
         last_frame = ttk.LabelFrame(upper_paned, text="Dernière Occurrence", padding=10)
         upper_paned.add(last_frame, weight=1)
         last_tree = ttk.Treeview(last_frame, columns=("id", "date", "site", "nature", "name"), show="headings", height=20)
@@ -336,7 +329,6 @@ class MainApp(tk.Tk):
         last_tree.column("name", width=300, anchor="w", stretch=True)
         last_tree.pack(fill=tk.BOTH, expand=True)
 
-        # Volet "Événements Récurrents Non Terminés"
         rec_frame = ttk.LabelFrame(upper_paned, text="Événements Récurrents Non Terminés", padding=10)
         upper_paned.add(rec_frame, weight=1)
         rec_tree = ttk.Treeview(rec_frame, columns=("id", "date", "site", "nature", "name"), show="headings", height=15)
@@ -352,7 +344,6 @@ class MainApp(tk.Tk):
         rec_tree.column("name", width=300, anchor="w", stretch=True)
         rec_tree.pack(fill=tk.BOTH, expand=True)
 
-        # Volet "À Venir"
         upcoming_frame = ttk.LabelFrame(upper_paned, text="À Venir", padding=10)
         upper_paned.add(upcoming_frame, weight=1)
         upcoming_tree = ttk.Treeview(upcoming_frame, columns=("id", "date", "site", "nature", "name"), show="headings", height=20)
@@ -368,7 +359,6 @@ class MainApp(tk.Tk):
         upcoming_tree.column("name", width=300, anchor="w", stretch=True)
         upcoming_tree.pack(fill=tk.BOTH, expand=True)
 
-        # Volet "Événements Non Récurrents Non Terminés" en bas, indépendant
         non_rec_frame = ttk.LabelFrame(main_paned, text="Événements Non Récurrents Non Terminés", padding=10)
         main_paned.add(non_rec_frame, weight=1)
         non_rec_tree = ttk.Treeview(non_rec_frame, columns=("id", "date", "site", "nature", "name"), show="headings", height=15)
@@ -384,22 +374,16 @@ class MainApp(tk.Tk):
         non_rec_tree.column("name", width=300, anchor="w", stretch=True)
         non_rec_tree.pack(fill=tk.BOTH, expand=True)
 
-        # Bouton Enregistrer
         save_button_frame = ttk.Frame(window)
         save_button_frame.pack(fill=tk.X, pady=5)
         ttk.Button(save_button_frame, text="Enregistrer", command=lambda: self.save_planning_changes(last_tree, non_rec_tree, rec_tree, upcoming_tree)).pack(side=tk.RIGHT, padx=10)
 
-        # Structure pour stocker les modifications
         self.planning_date_entries = {}
-
-        # Chargement initial des données et adaptation des colonnes
         self.refresh_planning(last_tree, non_rec_tree, rec_tree, upcoming_tree)
         self.adjust_column_widths(window, [last_tree, rec_tree, upcoming_tree, non_rec_tree])
 
-        # Redimensionnement dynamique des colonnes
         window.bind("<Configure>", lambda e: self.adjust_column_widths(window, [last_tree, rec_tree, upcoming_tree, non_rec_tree]))
 
-        # Double-clic pour éditer la date
         def edit_date(event, tree, prefix):
             item = tree.identify_row(event.y)
             if item:
@@ -409,7 +393,7 @@ class MainApp(tk.Tk):
                     name = tree.item(item, "values")[4]
                     site = tree.item(item, "values")[2]
                     nature = tree.item(item, "values")[3]
-                    date = tree.item(item, "values")[1]  # Récupérer la date pour les événements à venir
+                    date = tree.item(item, "values")[1]
                     if prefix == "upcoming":
                         key = f"{prefix}_{event_id}_{name}_{nature}_{site}_{date}"
                     else:
@@ -423,47 +407,32 @@ class MainApp(tk.Tk):
 
         last_tree.bind("<Double-1>", lambda e: edit_date(e, last_tree, "last"))
         non_rec_tree.bind("<Double-1>", lambda e: edit_date(e, non_rec_tree, "nonrec"))
-        rec_tree.bind("<Double-1>", lambda e: edit_date(e, rec_tree, "rec"))
+        rec_tree.bind("<Double-1>", lambda e: edit_dategean(e, rec_tree, "rec"))
         upcoming_tree.bind("<Double-1>", lambda e: edit_date(e, upcoming_tree, "upcoming"))
 
     def sort_column(self, tree, col, reverse):
-        # Récupérer les données triées
         data = [(tree.set(k, col), k) for k in tree.get_children('')]
-        
-        # Trier selon le type de données (dates ou texte)
         try:
             data.sort(key=lambda x: datetime.strptime(x[0], "%Y-%m-%d") if col == "date" else x[0], reverse=reverse)
         except ValueError:
-            data.sort(key=lambda x: x[0], reverse=reverse)  # Tri par défaut pour texte ou autres cas
-
-        # Réorganiser les éléments dans le Treeview
+            data.sort(key=lambda x: x[0], reverse=reverse)
         for index, (val, k) in enumerate(data):
             tree.move(k, '', index)
-
-        # Inverser l'ordre au prochain clic
         tree.heading(col, command=lambda: self.sort_column(tree, col, not reverse))
 
     def adjust_column_widths(self, window, trees):
-        # Ajuster la largeur des colonnes en fonction de la largeur de chaque frame parent
         for tree in trees:
             frame = tree.master
-            frame_width = frame.winfo_width() if frame.winfo_width() > 0 else 300  # Valeur par défaut si non défini
-            total_columns = 4  # Exclure la colonne "id"
-            base_width = int(frame_width // total_columns)  # Forcer un entier
-
-            # Ajuster les largeurs avec un minimum pour éviter les problèmes d'affichage
+            frame_width = frame.winfo_width() if frame.winfo_width() > 0 else 300
+            total_columns = 4
+            base_width = int(frame_width // total_columns)
             min_width = 50
             tree.column("date", width=max(int(base_width * 1.5), min_width), anchor="w", stretch=True)
             tree.column("site", width=max(base_width, min_width), anchor="w", stretch=True)
             tree.column("nature", width=max(base_width, min_width), anchor="w", stretch=True)
             tree.column("name", width=max(int(base_width * 2), min_width), anchor="w", stretch=True)
 
-    def apply_filters(self):
-        # Cette méthode est supprimée car nous ne voulons plus de filtres
-        pass
-
     def mark_as_finished(self, last_tree, non_rec_tree, rec_tree, upcoming_tree):
-        # Déterminer quel Treeview est actif (sélectionné)
         selected_trees = [non_rec_tree, rec_tree]
         active_tree = None
         for tree in selected_trees:
@@ -477,10 +446,9 @@ class MainApp(tk.Tk):
 
         item = active_tree.selection()[0]
         event_id = active_tree.item(item, "values")[0]
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
 
-        # Vérifier si l'événement est récurrent
         cursor.execute("SELECT date, site, nature, name, recurrent, finished, periodicity FROM events WHERE id=?", (event_id,))
         event = cursor.fetchone()
         if not event:
@@ -489,11 +457,8 @@ class MainApp(tk.Tk):
             return
 
         date, site, nature, name, recurrent, finished, periodicity = event
-
-        # Mettre à jour l'événement sélectionné comme terminé
         cursor.execute("UPDATE events SET finished=1 WHERE id=?", (event_id,))
 
-        # Si récurrent, créer une nouvelle occurrence avec la date suivante
         if recurrent:
             old_date = datetime.strptime(date, "%Y-%m-%d")
             next_date = self.calculate_next_date(old_date, periodicity)
@@ -502,15 +467,12 @@ class MainApp(tk.Tk):
 
         conn.commit()
         conn.close()
-
-        # Rafraîchir dynamiquement la vue Planning avec les nouveaux enregistrements
         self.refresh_planning(last_tree, non_rec_tree, rec_tree, upcoming_tree)
 
     def save_planning_changes(self, last_tree, non_rec_tree, rec_tree, upcoming_tree):
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
 
-        # Mise à jour des événements non récurrents non terminés
         for item in non_rec_tree.get_children():
             event_id = non_rec_tree.item(item, "values")[0]
             name = non_rec_tree.item(item, "values")[4]
@@ -520,7 +482,6 @@ class MainApp(tk.Tk):
             new_date = self.planning_date_entries[key].get()
             cursor.execute("UPDATE events SET date=? WHERE id=?", (new_date, event_id))
 
-        # Mise à jour des événements récurrents non terminés
         for item in rec_tree.get_children():
             event_id = rec_tree.item(item, "values")[0]
             name = rec_tree.item(item, "values")[4]
@@ -530,7 +491,6 @@ class MainApp(tk.Tk):
             new_date = self.planning_date_entries[key].get()
             cursor.execute("UPDATE events SET date=? WHERE id=?", (new_date, event_id))
 
-        # Mise à jour des dernières occurrences
         for item in last_tree.get_children():
             event_id = last_tree.item(item, "values")[0]
             name = last_tree.item(item, "values")[4]
@@ -540,21 +500,18 @@ class MainApp(tk.Tk):
             new_date = self.planning_date_entries[key].get()
             cursor.execute("UPDATE events SET date=? WHERE id=?", (new_date, event_id))
 
-        # Mise à jour des événements à venir
         for item in upcoming_tree.get_children():
             event_id = upcoming_tree.item(item, "values")[0]
             name = upcoming_tree.item(item, "values")[4]
             nature = upcoming_tree.item(item, "values")[3]
             site = upcoming_tree.item(item, "values")[2]
-            date = upcoming_tree.item(item, "values")[1]  # Récupérer la date spécifique
+            date = upcoming_tree.item(item, "values")[1]
             key = f"upcoming_{event_id}_{name}_{nature}_{site}_{date}"
             new_date = self.planning_date_entries[key].get()
             cursor.execute("UPDATE events SET date=? WHERE id=?", (new_date, event_id))
 
         conn.commit()
         conn.close()
-
-        # Rafraîchir dynamiquement la vue Planning après les modifications
         self.refresh_planning(last_tree, non_rec_tree, rec_tree, upcoming_tree)
 
     def calculate_next_date(self, date, periodicity):
@@ -570,8 +527,7 @@ class MainApp(tk.Tk):
             new_date = date.replace(year=date.year + 1)
         else:
             new_date = date
-
-        while new_date.weekday() >= 5:  # Éviter les week-ends
+        while new_date.weekday() >= 5:
             new_date += timedelta(days=1)
         return new_date
 
@@ -582,11 +538,10 @@ class MainApp(tk.Tk):
         upcoming_tree.delete(*upcoming_tree.get_children())
         self.planning_date_entries.clear()
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         today = datetime.now().strftime("%Y-%m-%d")
 
-        # Événements non récurrents (uniquement non terminés)
         cursor.execute("SELECT id, date, site, nature, name, finished FROM events WHERE recurrent=0 AND finished=0 ORDER BY date ASC")
         non_rec_events = cursor.fetchall()
         for i, (event_id, date, site, nature, name, finished) in enumerate(non_rec_events):
@@ -596,9 +551,7 @@ class MainApp(tk.Tk):
             non_rec_tree.tag_configure(f"nonrec{i}", background=bg_color)
             self.planning_date_entries[f"nonrec_{key}"] = ttk.Entry(non_rec_tree, width=15)
             self.planning_date_entries[f"nonrec_{key}"].insert(0, date)
-            non_rec_tree.set(non_rec_tree.get_children()[-1], "date", date)
 
-        # Événements récurrents avec regroupement (non terminés avant ou à aujourd’hui)
         cursor.execute("SELECT MIN(id) as id, MIN(date) as date, site, nature, name, finished, recurrent, periodicity FROM events WHERE recurrent=1 AND date <= ? GROUP BY name, nature, site, periodicity HAVING finished=0 ORDER BY date ASC", (today,))
         rec_events = cursor.fetchall()
         for i, (event_id, date, site, nature, name, finished, recurrent, periodicity) in enumerate(rec_events):
@@ -608,21 +561,16 @@ class MainApp(tk.Tk):
             rec_tree.tag_configure(f"rec{i}", background=bg_color)
             self.planning_date_entries[f"rec_{key}"] = ttk.Entry(rec_tree, width=15)
             self.planning_date_entries[f"rec_{key}"].insert(0, date)
-            rec_tree.set(rec_tree.get_children()[-1], "date", date)
 
-        # Dernière Occurrence (uniquement les récurrents terminés avant ou à aujourd’hui)
         cursor.execute("SELECT id, date, site, nature, name FROM events WHERE recurrent=1 AND finished=1 AND date <= ? ORDER BY date DESC", (today,))
         last_events = cursor.fetchall()
-        print(f"Dernière Occurrence - Résultats de la requête : {last_events}")  # Débogage
         for i, (event_id, date, site, nature, name) in enumerate(last_events):
             key = f"{event_id}_{name}_{nature}_{site}"
             last_tree.insert("", "end", values=(event_id, date, site, nature, name), tags=(f"last{i}",))
             last_tree.tag_configure(f"last{i}", background="#ffffff" if i % 2 == 0 else "#f0f0f0")
             self.planning_date_entries[f"last_{key}"] = ttk.Entry(last_tree, width=15)
             self.planning_date_entries[f"last_{key}"].insert(0, date)
-            last_tree.set(last_tree.get_children()[-1], "date", date)
 
-        # À Venir (uniquement les récurrents futurs non terminés)
         cursor.execute("SELECT id, date, site, nature, name FROM events WHERE recurrent=1 AND finished=0 AND date > ? ORDER BY date ASC", (today,))
         upcoming_events = cursor.fetchall()
         for i, (event_id, date, site, nature, name) in enumerate(upcoming_events):
@@ -631,12 +579,11 @@ class MainApp(tk.Tk):
             upcoming_tree.tag_configure(f"upcoming{i}", background="#ffffff" if i % 2 == 0 else "#f0f0f0")
             self.planning_date_entries[f"upcoming_{key}"] = ttk.Entry(upcoming_tree, width=15)
             self.planning_date_entries[f"upcoming_{key}"].insert(0, date)
-            upcoming_tree.set(upcoming_tree.get_children()[-1], "date", date)
 
         conn.close()
 
     def get_events_for_day(self, date):
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT name, description, site, nature, time_spent, finished FROM events WHERE date <= ? AND (end_date IS NULL OR end_date >= ?)", (date, date))
         events = cursor.fetchall()
@@ -664,7 +611,7 @@ class MainApp(tk.Tk):
                         row = self.event_list.item(row_id, "values")
                         event_date = row[0].split(" - ")[0]
                         event_name = row[3].strip()
-                        conn = sqlite3.connect(DB_PATH)
+                        conn = sqlite3.connect(self.DB_PATH)
                         cursor = conn.cursor()
                         cursor.execute("SELECT date, end_date, site, nature, name, description, time_spent, attachments, finished FROM events WHERE date = ? AND TRIM(LOWER(REPLACE(name, ' ', ''))) LIKE LOWER(REPLACE(?, ' ', ''))", (event_date, f"%{event_name}%"))
                         event = cursor.fetchone()
@@ -682,7 +629,7 @@ class MainApp(tk.Tk):
         filepaths = filedialog.askopenfilenames()
         for filepath in filepaths:
             filename = os.path.basename(filepath)
-            dest = os.path.join(ATTACHMENTS_DIR, filename)
+            dest = os.path.join(self.ATTACHMENTS_DIR, filename)
             os.rename(filepath, dest)
             if filename not in self.attachments:
                 self.attachments.append(filename)
@@ -700,14 +647,14 @@ class MainApp(tk.Tk):
         if sel:
             event_date = self.event_list.item(sel, "values")[0].split(" - ")[0]
             event_name = self.event_list.item(sel, "values")[3].strip()
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(self.DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT attachments FROM events WHERE date = ? AND TRIM(LOWER(REPLACE(name, ' ', ''))) LIKE LOWER(REPLACE(?, ' ', ''))", (event_date, f"%{event_name}%"))
             attachments = cursor.fetchone()[0]
             conn.close()
             if attachments and attachments != "None":
                 for attachment in attachments.split(","):
-                    filepath = os.path.join(ATTACHMENTS_DIR, attachment)
+                    filepath = os.path.join(self.ATTACHMENTS_DIR, attachment)
                     if os.path.exists(filepath):
                         webbrowser.open(filepath)
                     else:
@@ -719,7 +666,7 @@ class MainApp(tk.Tk):
 
     def delete_event(self):
         if self.selected_event_id and messagebox.askyesno("Confirmation", "Supprimer cet événement ?"):
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(self.DB_PATH)
             cursor = conn.cursor()
             cursor.execute("DELETE FROM events WHERE id = ?", (self.selected_event_id,))
             conn.commit()
@@ -745,7 +692,7 @@ class MainApp(tk.Tk):
             messagebox.showerror("Erreur", "Le nom est obligatoire")
             return
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         if self.selected_event_id:
             cursor.execute("UPDATE events SET date=?, end_date=?, site=?, nature=?, name=?, time_spent=?, description=?, attachments=?, finished=?, recurrent=?, periodicity=? WHERE id=?",
@@ -795,7 +742,7 @@ class MainApp(tk.Tk):
             event_date = values[0].split(" - ")[0] if values[0] else None
             event_name = values[3].strip()
 
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(self.DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT id, end_date, site, nature, name, description, time_spent, attachments, finished, recurrent, periodicity FROM events WHERE date = ? AND TRIM(LOWER(REPLACE(name, ' ', ''))) LIKE LOWER(REPLACE(?, ' ', ''))", (event_date, f"%{event_name}%"))
             event = cursor.fetchone()
@@ -824,7 +771,7 @@ class MainApp(tk.Tk):
 
     def load_events(self):
         self.event_list.delete(*self.event_list.get_children())
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT date, site, nature, name, finished FROM events ORDER BY date ASC")
         for i, event in enumerate(cursor.fetchall()):
@@ -837,7 +784,7 @@ class MainApp(tk.Tk):
 
     def search_events(self):
         self.event_list.delete(*self.event_list.get_children())
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         query = "SELECT date, site, nature, name, finished FROM events WHERE 1=1"
         params = []
         for var, col in [(self.search_date_var, "date"), (self.search_site_var, "site"), (self.search_nature_var, "nature"),
@@ -879,7 +826,7 @@ class MainApp(tk.Tk):
 
     def load_filtered_events(self, start_date, end_date):
         self.event_list.delete(*self.event_list.get_children())
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.DB_PATH)
         cursor = conn.cursor()
         query = "SELECT date, site, nature, name, finished FROM events"
         if start_date and end_date:
@@ -895,23 +842,6 @@ class MainApp(tk.Tk):
             self.event_list.tag_configure(tag, background="#ffffff" if i % 2 == 0 else "#f0f0f0")
         conn.close()
 
-    def sort_column(self, tree, col, reverse):
-        # Récupérer les données triées
-        data = [(tree.set(k, col), k) for k in tree.get_children('')]
-        
-        # Trier selon le type de données (dates ou texte)
-        try:
-            data.sort(key=lambda x: datetime.strptime(x[0], "%Y-%m-%d") if col == "date" else x[0], reverse=reverse)
-        except ValueError:
-            data.sort(key=lambda x: x[0], reverse=reverse)  # Tri par défaut pour texte ou autres cas
-
-        # Réorganiser les éléments dans le Treeview
-        for index, (val, k) in enumerate(data):
-            tree.move(k, '', index)
-
-        # Inverser l'ordre au prochain clic
-        tree.heading(col, command=lambda: self.sort_column(tree, col, not reverse))
-
     def format_date_with_day(self, date_str):
         return datetime.strptime(date_str, "%Y-%m-%d").strftime("%Y-%m-%d - %A") if date_str else ""
 
@@ -919,5 +849,9 @@ class MainApp(tk.Tk):
         return datetime.strptime(date_str, "%Y-%m-%d").weekday() >= 5 if date_str else False
 
 if __name__ == "__main__":
-    app = MainApp()
-    app.mainloop()
+    root = tk.Tk()
+    root.title("Projet Archiviste - Registre")
+    root.geometry("1400x1000")
+    app = EventRegisterApp(root, os.path.dirname(os.path.abspath(__file__)))
+    app.pack(fill=tk.BOTH, expand=True)
+    root.mainloop()
