@@ -22,6 +22,6 @@ Chaque application peut être lancée indépendamment les unes des autres en lan
 **Zip_extractor** : dézipper des fichiers zip en masse.
 
 ----
-
+Python : https://www.python.org/downloads/
 IDE : Thonny - https://thonny.org/
 Discord : https://discord.gg/MFk2kUhD
