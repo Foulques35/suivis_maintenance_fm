@@ -1,4 +1,0 @@
-installation de tkcalendar : pip install tkcalendar
-Installation de Pillow : pip install pillow
-Installation de Reportlab : pip install Reportlab
-Installation de extract-msg : pip install extract-msg
