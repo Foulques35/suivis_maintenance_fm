@@ -268,7 +268,6 @@ class CommandeApp(ttk.Frame):
             logging.error(f"Erreur lors du chargement des commandes : {e}")
             messagebox.showerror("Erreur", f"Impossible de charger les commandes : {e}")
 
-    # Les autres méthodes restent identiques, juste utiliser self.COMMANDES_DB_PATH et self.COMMANDES_ATTACHMENTS_DIR
     def adjust_column_widths(self):
         visible_columns = ["id", "annee", "compte", "type_commande", "commande", "livree", 
                           "receptionnee", "fournisseur", "cout_materiel", "cout_soustraitance", 
@@ -513,13 +512,31 @@ class CommandeApp(ttk.Frame):
                 destination = os.path.join(supplier_dir, file_name)
                 if not os.path.exists(destination):
                     os.rename(file_path, destination)
-                self.documents_listbox.insert(tk.END, destination)
+                # Construire le chemin relatif par rapport à base_dir et s'assurer qu'il commence par P2-Commandes/
+                relative_path = os.path.relpath(destination, self.base_dir).replace(os.sep, '/')
+                # S'assurer que le chemin commence par P2-Commandes/
+                if not relative_path.startswith('P2-Commandes/'):
+                    relative_path = f"P2-Commandes/{year}/{account}/{supplier}/{file_name}".replace(os.sep, '/')
+                self.documents_listbox.insert(tk.END, relative_path)
 
     def open_document(self):
         selected_item = self.documents_listbox.curselection()
         if selected_item:
-            document = self.documents_listbox.get(selected_item)
-            document_path = Path(document.replace("\\", "/"))
+            relative_path = self.documents_listbox.get(selected_item)
+            # Normaliser les séparateurs dans le chemin relatif (remplacer \ par /)
+            relative_path = relative_path.replace('\\', '/')
+            # Vérifier si le chemin relatif commence par P2-Commandes/
+            if relative_path.startswith('P2-Commandes/'):
+                # Retirer P2-Commandes/ pour éviter la duplication
+                relative_path = relative_path[len('P2-Commandes/'):]
+            # Reconstruire le chemin absolu à partir du chemin relatif
+            document_path = Path(os.path.join(self.COMMANDES_ATTACHMENTS_DIR, relative_path))
+            # Afficher le chemin complet pour le débogage
+            print(f"Tentative d'ouverture du fichier : {document_path}")
+            # Vérifier si le fichier existe
+            if not document_path.exists():
+                messagebox.showerror("Erreur", f"Le fichier n'existe pas : {document_path}")
+                return
             try:
                 if platform.system() == "Windows":
                     os.startfile(document_path)
@@ -785,7 +802,6 @@ class DevisApp(ttk.Frame):
             logging.error(f"Erreur lors du chargement des devis : {e}")
             messagebox.showerror("Erreur", f"Impossible de charger les devis : {e}")
 
-    # Les autres méthodes restent identiques, juste utiliser self.DEVIS_DB_PATH et self.DEVIS_ATTACHMENTS_DIR
     def adjust_column_widths(self):
         visible_columns = ["id", "ref_devis", "compte", "devis_accepte", "commande", "livraison", 
                           "reception", "achats", "vente", "notes"]
@@ -1018,13 +1034,22 @@ class DevisApp(ttk.Frame):
                 destination = os.path.join(devis_dir, file_name)
                 if not os.path.exists(destination):
                     os.rename(file_path, destination)
-                self.documents_listbox.insert(tk.END, destination)
+                # Stocker le chemin relatif par rapport à DEVIS_ATTACHMENTS_DIR avec des barres obliques
+                relative_path = os.path.relpath(destination, self.DEVIS_ATTACHMENTS_DIR).replace(os.sep, '/')
+                self.documents_listbox.insert(tk.END, relative_path)
 
     def open_document(self):
         selected_item = self.documents_listbox.curselection()
         if selected_item:
-            document = self.documents_listbox.get(selected_item)
-            document_path = Path(document.replace("\\", "/"))
+            relative_path = self.documents_listbox.get(selected_item)
+            # Normaliser les séparateurs dans le chemin relatif (remplacer \ par /)
+            relative_path = relative_path.replace('\\', '/')
+            # Reconstruire le chemin absolu à partir du chemin relatif
+            document_path = Path(os.path.join(self.DEVIS_ATTACHMENTS_DIR, relative_path))
+            # Vérifier si le fichier existe
+            if not document_path.exists():
+                messagebox.showerror("Erreur", f"Le fichier n'existe pas : {document_path}")
+                return
             try:
                 if platform.system() == "Windows":
                     os.startfile(document_path)
