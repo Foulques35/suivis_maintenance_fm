@@ -20,6 +20,7 @@ Chaque application peut être lancée indépendamment les unes des autres en lan
 **Registre-V2** : Main courante pour la maintenance avec gestion de pièces jointes et vue planning en kanban.
 **Stock** : gestion d'un stock avec pièces jointe de facon très simple avec peu de fonctionnalités.
 **Zip_extractor** : dézipper des fichiers zip en masse.
+**Suivis de compteur (en test)** permet de designer une base de donnée pour le suivi de compteurs électriques et/ou d'eau. DB_designer permet de créer sa base de donnée, Releves_compteurs permet d'enregistrer ses index (configuration permet d'enregistrer l'index de départ). Rapports-compteur permet d'avoir une visualisation de ses relevés par intervales en comparant les valeurs des compteurs dans le temps, en page 2 une vue graphique permet de faire la synthèse.
 
 ----
 Python : https://www.python.org/downloads/
