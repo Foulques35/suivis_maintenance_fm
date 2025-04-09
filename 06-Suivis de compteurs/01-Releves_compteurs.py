@@ -42,12 +42,13 @@ class MeterReadingApp:
         self.setup_config_tab()
 
     def create_readings_table(self):
-        """Crée les tables nécessaires et ajoute la colonne 'note' si elle n'existe pas."""
+        """Crée les tables nécessaires et ajoute les colonnes nécessaires."""
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS readings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             meter_id INTEGER,
             date TEXT NOT NULL,
             meter_index INTEGER NOT NULL,
+            consumption INTEGER DEFAULT 0,
             note TEXT,
             FOREIGN KEY (meter_id) REFERENCES meters(id)
         )''')
@@ -56,9 +57,9 @@ class MeterReadingApp:
             base_index INTEGER NOT NULL,
             FOREIGN KEY (meter_id) REFERENCES meters(id)
         )''')
-        # Ajouter la colonne 'note' si elle n'existe pas déjà
+        # Ajouter la colonne 'consumption' si elle n'existe pas déjà
         try:
-            self.cursor.execute("ALTER TABLE readings ADD COLUMN note TEXT")
+            self.cursor.execute("ALTER TABLE readings ADD COLUMN consumption INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
             # La colonne existe déjà, pas d'erreur
             pass
@@ -270,6 +271,7 @@ class MeterReadingApp:
 
         item = self.meters_tree.item(selected[0])
         self.current_meter_id = item["tags"][0]
+        self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
         self.load_readings()
 
         last_month, last_year = self.get_last_reading_date(self.current_meter_id)
@@ -280,29 +282,40 @@ class MeterReadingApp:
             self.reading_month_var.set(f"{datetime.now().month:02d}")
             self.reading_year_var.set(str(datetime.now().year))
 
+    def update_all_consumptions(self, meter_id):
+        """Met à jour dynamiquement toutes les consommations pour un compteur donné."""
+        self.cursor.execute("SELECT base_index FROM base_indices WHERE meter_id=?", (meter_id,))
+        base_index = self.cursor.fetchone()
+        base_index = base_index[0] if base_index else 0
+
+        self.cursor.execute("SELECT id, meter_index, date FROM readings WHERE meter_id=? ORDER BY date", (meter_id,))
+        readings = self.cursor.fetchall()
+
+        prev_index = base_index
+        for reading in readings:
+            reading_id, current_index, date = reading
+            consumption = current_index - prev_index if current_index >= prev_index else 0
+            self.cursor.execute("UPDATE readings SET consumption=? WHERE id=?", (consumption, reading_id))
+            prev_index = current_index
+
+        self.conn.commit()
+
     def load_readings(self):
-        """Charge les relevés dans le Treeview."""
+        """Charge les relevés dans le Treeview avec les consommations enregistrées."""
         for item in self.readings_tree.get_children():
             self.readings_tree.delete(item)
 
         if not self.current_meter_id:
             return
 
-        self.cursor.execute("SELECT base_index FROM base_indices WHERE meter_id=?", (self.current_meter_id,))
-        base_index = self.cursor.fetchone()
-        base_index = base_index[0] if base_index else 0
-
-        self.cursor.execute("SELECT id, meter_id, date, meter_index, note FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
+        self.cursor.execute("SELECT id, meter_id, date, meter_index, consumption, note FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
         readings = self.cursor.fetchall()
 
-        prev_index = base_index
         for reading in readings:
-            reading_id, meter_id, date, index, note = reading
+            reading_id, meter_id, date, index, consumption, note = reading
             meter_name = next((meter[1] for meter in self.meters if meter[0] == meter_id), "Inconnu")
-            consumption = index - prev_index if index >= prev_index else 0
             note = note if note is not None else ""
             self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption, note), tags=(index,))
-            prev_index = index
 
     def filter_readings(self, event=None):
         """Filtre les relevés dans le Treeview en fonction de la recherche et du filtre de date."""
@@ -314,10 +327,6 @@ class MeterReadingApp:
 
         if not self.current_meter_id:
             return
-
-        self.cursor.execute("SELECT base_index FROM base_indices WHERE meter_id=?", (self.current_meter_id,))
-        base_index = self.cursor.fetchone()
-        base_index = base_index[0] if base_index else 0
 
         now = datetime.now()
         if date_filter == "Ce mois-ci":
@@ -338,19 +347,16 @@ class MeterReadingApp:
             start_date = "0000-00"
             end_date = "9999-99"
 
-        self.cursor.execute("SELECT id, meter_id, date, meter_index, note FROM readings WHERE meter_id=? AND date BETWEEN ? AND ? ORDER BY date", (self.current_meter_id, start_date, end_date))
+        self.cursor.execute("SELECT id, meter_id, date, meter_index, consumption, note FROM readings WHERE meter_id=? AND date BETWEEN ? AND ? ORDER BY date", (self.current_meter_id, start_date, end_date))
         readings = self.cursor.fetchall()
 
-        prev_index = base_index
         for reading in readings:
-            reading_id, meter_id, date, index, note = reading
+            reading_id, meter_id, date, index, consumption, note = reading
             meter_name = next((meter[1] for meter in self.meters if meter[0] == meter_id), "Inconnu")
-            consumption = index - prev_index if index >= prev_index else 0
             note = note if note is not None else ""
             if (search_term in date.lower() or search_term in meter_name.lower() or 
                 search_term in str(index) or search_term in str(consumption) or search_term in note.lower()):
                 self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption, note), tags=(index,))
-            prev_index = index
 
     def load_reading_to_form(self, event):
         """Charge les données d'un relevé dans le formulaire."""
@@ -373,7 +379,7 @@ class MeterReadingApp:
         self.reading_note_var.set(note)
 
     def edit_reading(self, event):
-        """Permet d'éditer un relevé directement dans le Treeview."""
+        """Permet d'éditer un relevé directement dans le Treeview et met à jour les consommations."""
         selected = self.readings_tree.selection()
         if not selected:
             return
@@ -396,6 +402,7 @@ class MeterReadingApp:
                     if not (month.isdigit() and year.isdigit() and 1 <= int(month) <= 12 and 2000 <= int(year) <= 2030):
                         raise ValueError
                     self.cursor.execute("UPDATE readings SET date=? WHERE id=?", (new_value, reading_id))
+                    self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
                 except ValueError:
                     messagebox.showwarning("Erreur", "Format de date invalide (YYYY-MM).")
                     entry.destroy()
@@ -406,7 +413,9 @@ class MeterReadingApp:
                     messagebox.showwarning("Erreur", "L'index doit être un nombre entier.")
                     entry.destroy()
                     return
-                self.cursor.execute("UPDATE readings SET meter_index=? WHERE id=?", (int(new_value), reading_id))
+                new_index = int(new_value)
+                self.cursor.execute("UPDATE readings SET meter_index=? WHERE id=?", (new_index, reading_id))
+                self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
             elif column == "#6":  # Note
                 self.cursor.execute("UPDATE readings SET note=? WHERE id=?", (new_value, reading_id))
 
@@ -419,7 +428,7 @@ class MeterReadingApp:
         entry.focus_set()
 
     def update_reading(self, *args):
-        """Met à jour un relevé ou en ajoute un nouveau."""
+        """Met à jour un relevé ou en ajoute un nouveau et recalcule toutes les consommations."""
         month = self.reading_month_var.get()
         year = self.reading_year_var.get()
         if not month or not year:
@@ -445,6 +454,7 @@ class MeterReadingApp:
             self.current_reading_id = self.cursor.lastrowid
 
         self.conn.commit()
+        self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
         self.load_readings()
 
     def clear_reading_form(self):
@@ -465,7 +475,7 @@ class MeterReadingApp:
         self.reading_note_var.set("")
 
     def delete_reading(self):
-        """Supprime un relevé sélectionné."""
+        """Supprime un relevé sélectionné et recalcule les consommations."""
         if not self.current_reading_id:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un relevé à supprimer.")
             return
@@ -473,6 +483,7 @@ class MeterReadingApp:
         if messagebox.askyesno("Confirmation", "Supprimer ce relevé ?"):
             self.cursor.execute("DELETE FROM readings WHERE id=?", (self.current_reading_id,))
             self.conn.commit()
+            self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
             self.clear_reading_form()
             self.load_readings()
 
@@ -509,7 +520,7 @@ class MeterReadingApp:
                 self.config_tree.insert("", tk.END, values=(category_name, meter[1], f"{base_index:,}".replace(",", " ")), tags=(meter_id,))
 
     def edit_base_index(self, event):
-        """Permet d'éditer l'index de base directement dans le Treeview."""
+        """Permet d'éditer l'index de base directement dans le Treeview et recalcule les consommations."""
         selected = self.config_tree.selection()
         if not selected:
             return
@@ -529,7 +540,10 @@ class MeterReadingApp:
                 new_value = int(new_value)
                 self.cursor.execute("INSERT OR REPLACE INTO base_indices (meter_id, base_index) VALUES (?, ?)", (meter_id, new_value))
                 self.conn.commit()
+                self.update_all_consumptions(meter_id)  # Recalculer toutes les consommations
                 self.load_config()
+                if self.current_meter_id == meter_id:
+                    self.load_readings()
             entry.destroy()
 
         entry.bind("<Return>", save_edit)
