@@ -231,9 +231,10 @@ class MeterConsumptionApp:
             messagebox.showwarning("Erreur", "L'objectif doit être un nombre.")
             return
 
-        self.cursor.execute("SELECT meter_id, date, meter_index FROM readings WHERE date BETWEEN ? AND ? ORDER BY date", (period1_start_date, period1_end_date))
+        # Récupérer les consommations au lieu des index
+        self.cursor.execute("SELECT meter_id, date, consumption FROM readings WHERE date BETWEEN ? AND ? ORDER BY date", (period1_start_date, period1_end_date))
         period1_readings = self.cursor.fetchall()
-        self.cursor.execute("SELECT meter_id, date, meter_index, note FROM readings WHERE date BETWEEN ? AND ? ORDER BY date", (period2_start_date, period2_end_date))
+        self.cursor.execute("SELECT meter_id, date, consumption, note FROM readings WHERE date BETWEEN ? AND ? ORDER BY date", (period2_start_date, period2_end_date))
         period2_readings = self.cursor.fetchall()
 
         is_monthly = self.monthly_comparison_var.get() == 1
@@ -408,10 +409,10 @@ class MeterConsumptionApp:
                                 f"{month1} vs {month2}",
                                 category_name,
                                 meter_name,
-                                f"{consumption1:,} kWh".replace(",", " "),
-                                f"{consumption2:,} kWh".replace(",", " "),
+                                f"{consumption1:,}".replace(",", " "),
+                                f"{consumption2:,}".replace(",", " "),
                                 note2,
-                                f"{difference:+,} kWh".replace(",", " "),
+                                f"{difference:+,}".replace(",", " "),
                                 f"{target_diff:+.2f}%"
                             ))
 
@@ -435,10 +436,10 @@ class MeterConsumptionApp:
                                 f"{month1} vs {month2}",
                                 category_name,
                                 "Sous-total",
-                                f"{total1:,} kWh".replace(",", " "),
-                                f"{total2:,} kWh".replace(",", " "),
+                                f"{total1:,}".replace(",", " "),
+                                f"{total2:,}".replace(",", " "),
                                 note2,
-                                f"{difference:+,} kWh".replace(",", " "),
+                                f"{difference:+,}".replace(",", " "),
                                 f"{target_diff:+.2f}%"
                             ))
 
@@ -450,10 +451,10 @@ class MeterConsumptionApp:
                         f"{month1} vs {month2}",
                         top_level_category,
                         "Total",
-                        f"{total1:,} kWh".replace(",", " "),
-                        f"{total2:,} kWh".replace(",", " "),
+                        f"{total1:,}".replace(",", " "),
+                        f"{total2:,}".replace(",", " "),
                         "",
-                        f"{difference:+,} kWh".replace(",", " "),
+                        f"{difference:+,}".replace(",", " "),
                         f"{target_diff:+.2f}%"
                     ))
 
@@ -589,10 +590,10 @@ class MeterConsumptionApp:
                         self.compare_tree.insert("", tk.END, values=(
                             category_name,
                             meter_name,
-                            f"{consumption1:,} kWh".replace(",", " "),
-                            f"{consumption2:,} kWh".replace(",", " "),
+                            f"{consumption1:,}".replace(",", " "),
+                            f"{consumption2:,}".replace(",", " "),
                             note2,
-                            f"{difference:+,} kWh".replace(",", " "),
+                            f"{difference:+,}".replace(",", " "),
                             f"{target_diff:+.2f}%"
                         ))
 
@@ -615,10 +616,10 @@ class MeterConsumptionApp:
                         self.compare_tree.insert("", tk.END, values=(
                             category_name,
                             "Sous-total",
-                            f"{total1:,} kWh".replace(",", " "),
-                            f"{total2:,} kWh".replace(",", " "),
+                            f"{total1:,}".replace(",", " "),
+                            f"{total2:,}".replace(",", " "),
                             note2,
-                            f"{difference:+,} kWh".replace(",", " "),
+                            f"{difference:+,}".replace(",", " "),
                             f"{target_diff:+.2f}%"
                         ))
 
@@ -629,10 +630,10 @@ class MeterConsumptionApp:
                 self.compare_tree.insert("", tk.END, values=(
                     top_level_category,
                     "Total",
-                    f"{total1:,} kWh".replace(",", " "),
-                    f"{total2:,} kWh".replace(",", " "),
+                    f"{total1:,}".replace(",", " "),
+                    f"{total2:,}".replace(",", " "),
                     "",
-                    f"{difference:+,} kWh".replace(",", " "),
+                    f"{difference:+,}".replace(",", " "),
                     f"{target_diff:+.2f}%"
                 ))
 
@@ -755,7 +756,7 @@ class MeterConsumptionApp:
                     ax.set_xticks([])
                     ax.set_yticks([])
                     ax.set_title(title)
-                    ax.set_ylabel("Consommation (kWh)")
+                    ax.set_ylabel("Consommation")
                     fig.tight_layout()
                     canvas.draw()
                     if self.stats_text.winfo_exists():
@@ -797,7 +798,7 @@ class MeterConsumptionApp:
                 ax.set_xticks(x)
                 ax.set_xticklabels([f"{month1} vs {month2}" for month1, month2 in month_pairs], rotation=45, ha="right")
                 ax.set_title(title)
-                ax.set_ylabel("Consommation (kWh)")
+                ax.set_ylabel("Consommation")
                 ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
                 fig.tight_layout()
                 canvas.draw()
@@ -821,8 +822,8 @@ class MeterConsumptionApp:
                         mean_1 = np.mean(stats_values_1) if stats_values_1 else 0
                         mean_2 = np.mean(stats_values_2) if stats_values_2 else 0
                         self.stats_text.insert(tk.END, f"{month1} vs {month2} ({display_level}):\n")
-                        self.stats_text.insert(tk.END, f"Période 1 - Moyenne: {mean_1:,.2f} kWh\n")
-                        self.stats_text.insert(tk.END, f"Période 2 - Moyenne: {mean_2:,.2f} kWh\n\n")
+                        self.stats_text.insert(tk.END, f"Période 1 - Moyenne: {mean_1:,.2f}\n")
+                        self.stats_text.insert(tk.END, f"Période 2 - Moyenne: {mean_2:,.2f}\n\n")
 
             else:
                 filter_text = filter_var.get().lower()
@@ -866,7 +867,7 @@ class MeterConsumptionApp:
                     ax.set_xticks([])
                     ax.set_yticks([])
                     ax.set_title(title)
-                    ax.set_ylabel("Consommation (kWh)")
+                    ax.set_ylabel("Consommation")
                     fig.tight_layout()
                     canvas.draw()
                     if self.stats_text.winfo_exists():
@@ -901,7 +902,7 @@ class MeterConsumptionApp:
                 ax.set_xticks(x)
                 ax.set_xticklabels(categories, rotation=45, ha="right")
                 ax.set_title(title)
-                ax.set_ylabel("Consommation (kWh)")
+                ax.set_ylabel("Consommation")
                 ax.legend()
                 fig.tight_layout()
                 canvas.draw()
@@ -917,8 +918,8 @@ class MeterConsumptionApp:
                     mean_1 = np.mean(stats_values_1) if stats_values_1 else 0
                     mean_2 = np.mean(stats_values_2) if stats_values_2 else 0
                     self.stats_text.insert(tk.END, f"{display_level}:\n")
-                    self.stats_text.insert(tk.END, f"Période 1 - Moyenne: {mean_1:,.2f} kWh\n")
-                    self.stats_text.insert(tk.END, f"Période 2 - Moyenne: {mean_2:,.2f} kWh\n")
+                    self.stats_text.insert(tk.END, f"Période 1 - Moyenne: {mean_1:,.2f}\n")
+                    self.stats_text.insert(tk.END, f"Période 2 - Moyenne: {mean_2:,.2f}\n")
 
         filter_trace_id = filter_var.trace("w", lambda *args: update_graph())
         display_level_trace_id = display_level_var.trace("w", lambda *args: update_graph())
