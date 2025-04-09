@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 import sqlite3
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -57,11 +57,9 @@ class MeterReadingApp:
             base_index INTEGER NOT NULL,
             FOREIGN KEY (meter_id) REFERENCES meters(id)
         )''')
-        # Ajouter la colonne 'consumption' si elle n'existe pas déjà
         try:
             self.cursor.execute("ALTER TABLE readings ADD COLUMN consumption INTEGER DEFAULT 0")
         except sqlite3.OperationalError:
-            # La colonne existe déjà, pas d'erreur
             pass
         self.conn.commit()
 
@@ -128,30 +126,28 @@ class MeterReadingApp:
 
         ttk.Label(self.readings_form_frame, text="Mois :").grid(row=0, column=0, padx=5, pady=5, sticky="w")
         self.reading_month_var = tk.StringVar()
-        self.reading_month_combobox = ttk.Combobox(self.readings_form_frame, textvariable=self.reading_month_var, values=[f"{i:02d}" for i in range(1, 13)], width=5)
+        self.reading_month_combobox = ttk.Combobox(self.readings_form_frame, textvariable=self.reading_month_var, values=[f"{i:02d}" for i in range(1, 13)], width=5, state="disabled")
         self.reading_month_combobox.grid(row=0, column=1, padx=5, pady=5)
-        self.reading_month_combobox.bind("<<ComboboxSelected>>", self.update_reading)
 
         ttk.Label(self.readings_form_frame, text="Année :").grid(row=0, column=2, padx=5, pady=5, sticky="w")
         self.reading_year_var = tk.StringVar()
-        self.reading_year_combobox = ttk.Combobox(self.readings_form_frame, textvariable=self.reading_year_var, values=[str(i) for i in range(2000, 2030)], width=7)
+        self.reading_year_combobox = ttk.Combobox(self.readings_form_frame, textvariable=self.reading_year_var, values=[str(i) for i in range(2000, 2030)], width=7, state="disabled")
         self.reading_year_combobox.grid(row=0, column=3, padx=5, pady=5)
-        self.reading_year_combobox.bind("<<ComboboxSelected>>", self.update_reading)
 
         ttk.Label(self.readings_form_frame, text="Index :").grid(row=1, column=0, padx=5, pady=5, sticky="w")
         self.reading_index_var = tk.StringVar()
-        self.reading_index_entry = ttk.Entry(self.readings_form_frame, textvariable=self.reading_index_var)
+        self.reading_index_entry = ttk.Entry(self.readings_form_frame, textvariable=self.reading_index_var, state="disabled")
         self.reading_index_entry.grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
-        self.reading_index_var.trace("w", self.update_reading)
 
         ttk.Label(self.readings_form_frame, text="Note :").grid(row=2, column=0, padx=5, pady=5, sticky="w")
         self.reading_note_var = tk.StringVar()
-        self.reading_note_entry = ttk.Entry(self.readings_form_frame, textvariable=self.reading_note_var)
+        self.reading_note_entry = ttk.Entry(self.readings_form_frame, textvariable=self.reading_note_var, state="disabled")
         self.reading_note_entry.grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
-        self.reading_note_var.trace("w", self.update_reading)
 
-        ttk.Button(self.readings_form_frame, text="Nouveau", command=self.clear_reading_form).grid(row=3, column=0, padx=5, pady=5)
-        ttk.Button(self.readings_form_frame, text="Supprimer", command=self.delete_reading).grid(row=3, column=1, padx=5, pady=5)
+        ttk.Button(self.readings_form_frame, text="Ajouter un relevé", command=self.enable_add_reading).grid(row=3, column=0, padx=5, pady=5)
+        ttk.Button(self.readings_form_frame, text="Enregistrer", command=self.save_reading).grid(row=3, column=1, padx=5, pady=5)
+        ttk.Button(self.readings_form_frame, text="Modifier", command=self.enable_edit_reading).grid(row=3, column=2, padx=5, pady=5)
+        ttk.Button(self.readings_form_frame, text="Supprimer", command=self.delete_reading).grid(row=3, column=3, padx=5, pady=5)
 
         self.readings_filter_frame = ttk.Frame(self.readings_right_frame)
         self.readings_filter_frame.pack(fill="x", pady=5)
@@ -167,6 +163,8 @@ class MeterReadingApp:
         self.date_filter_combobox.pack(side="left", padx=5)
         self.date_filter_combobox.set("Aucun")
         self.date_filter_combobox.bind("<<ComboboxSelected>>", self.filter_readings)
+
+        ttk.Button(self.readings_filter_frame, text="Exporter", command=self.export_readings_to_txt).pack(side="left", padx=5)
 
         self.readings_tree_frame = ttk.Frame(self.readings_right_frame)
         self.readings_tree_frame.pack(fill="both", expand=True)
@@ -264,23 +262,16 @@ class MeterReadingApp:
         return None, None
 
     def load_selected_meter(self, event):
-        """Charge le compteur sélectionné dans le formulaire et met à jour les champs avec la dernière date."""
+        """Charge le compteur sélectionné et met à jour les champs avec la dernière date."""
         selected = self.meters_tree.selection()
         if not selected:
             return
 
         item = self.meters_tree.item(selected[0])
         self.current_meter_id = item["tags"][0]
-        self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
+        self.update_all_consumptions(self.current_meter_id)
         self.load_readings()
-
-        last_month, last_year = self.get_last_reading_date(self.current_meter_id)
-        if last_month and last_year:
-            self.reading_month_var.set(last_month)
-            self.reading_year_var.set(last_year)
-        else:
-            self.reading_month_var.set(f"{datetime.now().month:02d}")
-            self.reading_year_var.set(str(datetime.now().year))
+        self.clear_reading_form()
 
     def update_all_consumptions(self, meter_id):
         """Met à jour dynamiquement toutes les consommations pour un compteur donné."""
@@ -359,7 +350,7 @@ class MeterReadingApp:
                 self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption, note), tags=(index,))
 
     def load_reading_to_form(self, event):
-        """Charge les données d'un relevé dans le formulaire."""
+        """Charge les données d'un relevé dans le formulaire sans activer les champs."""
         selected = self.readings_tree.selection()
         if not selected:
             return
@@ -377,6 +368,11 @@ class MeterReadingApp:
 
         note = item[5] if len(item) > 5 else ""
         self.reading_note_var.set(note)
+
+        self.reading_month_combobox.config(state="disabled")
+        self.reading_year_combobox.config(state="disabled")
+        self.reading_index_entry.config(state="disabled")
+        self.reading_note_entry.config(state="disabled")
 
     def edit_reading(self, event):
         """Permet d'éditer un relevé directement dans le Treeview et met à jour les consommations."""
@@ -402,7 +398,7 @@ class MeterReadingApp:
                     if not (month.isdigit() and year.isdigit() and 1 <= int(month) <= 12 and 2000 <= int(year) <= 2030):
                         raise ValueError
                     self.cursor.execute("UPDATE readings SET date=? WHERE id=?", (new_value, reading_id))
-                    self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
+                    self.update_all_consumptions(self.current_meter_id)
                 except ValueError:
                     messagebox.showwarning("Erreur", "Format de date invalide (YYYY-MM).")
                     entry.destroy()
@@ -415,7 +411,7 @@ class MeterReadingApp:
                     return
                 new_index = int(new_value)
                 self.cursor.execute("UPDATE readings SET meter_index=? WHERE id=?", (new_index, reading_id))
-                self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
+                self.update_all_consumptions(self.current_meter_id)
             elif column == "#6":  # Note
                 self.cursor.execute("UPDATE readings SET note=? WHERE id=?", (new_value, reading_id))
 
@@ -427,38 +423,75 @@ class MeterReadingApp:
         entry.bind("<FocusOut>", save_edit)
         entry.focus_set()
 
-    def update_reading(self, *args):
-        """Met à jour un relevé ou en ajoute un nouveau et recalcule toutes les consommations."""
+    def enable_add_reading(self):
+        """Active les champs pour ajouter un nouveau relevé."""
+        if not self.current_meter_id:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner un compteur avant d'ajouter un relevé.")
+            return
+
+        self.current_reading_id = None
+        last_month, last_year = self.get_last_reading_date(self.current_meter_id)
+        if last_month and last_year:
+            self.reading_month_var.set(last_month)
+            self.reading_year_var.set(last_year)
+        else:
+            self.reading_month_var.set(f"{datetime.now().month:02d}")
+            self.reading_year_var.set(str(datetime.now().year))
+        self.reading_index_var.set("")
+        self.reading_note_var.set("")
+
+        self.reading_month_combobox.config(state="normal")
+        self.reading_year_combobox.config(state="normal")
+        self.reading_index_entry.config(state="normal")
+        self.reading_note_entry.config(state="normal")
+
+    def enable_edit_reading(self):
+        """Active les champs pour modifier un relevé existant."""
+        if not self.current_reading_id:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner un relevé à modifier.")
+            return
+
+        self.reading_month_combobox.config(state="normal")
+        self.reading_year_combobox.config(state="normal")
+        self.reading_index_entry.config(state="normal")
+        self.reading_note_entry.config(state="normal")
+
+    def save_reading(self):
+        """Enregistre un nouveau relevé ou valide les modifications."""
         month = self.reading_month_var.get()
         year = self.reading_year_var.get()
         if not month or not year:
+            messagebox.showwarning("Erreur", "Veuillez remplir la date.")
             return
 
         if not self.current_meter_id:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner un compteur.")
             return
 
         index = self.reading_index_var.get().replace(" ", "")
         if not index.isdigit():
+            messagebox.showwarning("Erreur", "L'index doit être un nombre entier.")
             return
         index = int(index)
 
         date = f"{year}-{month}"
         note = self.reading_note_var.get()
 
-        if self.current_reading_id:
+        if self.current_reading_id:  # Mode modification
             self.cursor.execute("UPDATE readings SET meter_id=?, date=?, meter_index=?, note=? WHERE id=?", 
                                (self.current_meter_id, date, index, note, self.current_reading_id))
-        else:
+        else:  # Mode nouveau relevé
             self.cursor.execute("INSERT INTO readings (meter_id, date, meter_index, note) VALUES (?, ?, ?, ?)", 
                                (self.current_meter_id, date, index, note))
             self.current_reading_id = self.cursor.lastrowid
 
         self.conn.commit()
-        self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
+        self.update_all_consumptions(self.current_meter_id)
         self.load_readings()
+        self.clear_reading_form()
 
     def clear_reading_form(self):
-        """Réinitialise le formulaire pour un nouveau relevé avec la dernière date du compteur sélectionné."""
+        """Réinitialise le formulaire et désactive les champs."""
         self.current_reading_id = None
         if self.current_meter_id:
             last_month, last_year = self.get_last_reading_date(self.current_meter_id)
@@ -473,6 +506,11 @@ class MeterReadingApp:
             self.reading_year_var.set(str(datetime.now().year))
         self.reading_index_var.set("")
         self.reading_note_var.set("")
+        
+        self.reading_month_combobox.config(state="disabled")
+        self.reading_year_combobox.config(state="disabled")
+        self.reading_index_entry.config(state="disabled")
+        self.reading_note_entry.config(state="disabled")
 
     def delete_reading(self):
         """Supprime un relevé sélectionné et recalcule les consommations."""
@@ -483,9 +521,47 @@ class MeterReadingApp:
         if messagebox.askyesno("Confirmation", "Supprimer ce relevé ?"):
             self.cursor.execute("DELETE FROM readings WHERE id=?", (self.current_reading_id,))
             self.conn.commit()
-            self.update_all_consumptions(self.current_meter_id)  # Recalculer toutes les consommations
+            self.update_all_consumptions(self.current_meter_id)
             self.clear_reading_form()
             self.load_readings()
+
+    def export_readings_to_txt(self):
+        """Exporte les données du Treeview dans un fichier texte."""
+        if not self.current_meter_id:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner un compteur avant d'exporter.")
+            return
+
+        # Récupérer le nom du compteur sélectionné
+        meter_name = next((meter[1] for meter in self.meters if meter[0] == self.current_meter_id), "Inconnu")
+
+        # Demander à l'utilisateur où sauvegarder le fichier
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Fichiers texte", "*.txt"), ("Tous les fichiers", "*.*")],
+            title="Exporter les relevés",
+            initialfile=f"releves_{meter_name}_{datetime.now().strftime('%Y%m%d')}"
+        )
+        if not file_path:
+            return  # L'utilisateur a annulé
+
+        # Récupérer les données du Treeview
+        items = self.readings_tree.get_children()
+        if not items:
+            messagebox.showinfo("Information", "Aucun relevé à exporter.")
+            return
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(f"Relevés pour le compteur : {meter_name}\n")
+                f.write(f"Exporté le : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+                f.write("ID | Date       | Compteur         | Index    | Consommation | Note\n")
+                f.write("-" * 80 + "\n")
+                for item in items:
+                    values = self.readings_tree.item(item)["values"]
+                    f.write(f"{values[0]:<3} | {values[1]:<10} | {values[2]:<16} | {values[3]:<8} | {values[4]:<12} | {values[5]}\n")
+            messagebox.showinfo("Succès", f"Les relevés ont été exportés dans {file_path}.")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'exporter les relevés : {str(e)}")
 
     def load_config(self):
         """Charge les compteurs et leurs index de base dans le Treeview."""
@@ -540,7 +616,7 @@ class MeterReadingApp:
                 new_value = int(new_value)
                 self.cursor.execute("INSERT OR REPLACE INTO base_indices (meter_id, base_index) VALUES (?, ?)", (meter_id, new_value))
                 self.conn.commit()
-                self.update_all_consumptions(meter_id)  # Recalculer toutes les consommations
+                self.update_all_consumptions(meter_id)
                 self.load_config()
                 if self.current_meter_id == meter_id:
                     self.load_readings()
