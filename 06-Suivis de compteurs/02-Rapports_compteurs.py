@@ -136,15 +136,32 @@ class MeterConsumptionApp:
         ttk.Button(self.compare_filter_frame, text="Comparer", command=self.compare_periods).pack(side="left", padx=10)
         ttk.Button(self.compare_filter_frame, text="Exporter en CSV", command=self.export_to_csv).pack(side="left", padx=10)
 
+        self.search_frame = ttk.Frame(self.compare_frame)
+        self.search_frame.pack(fill="x", pady=5)
+
+        ttk.Label(self.search_frame, text="Rechercher Catégorie :").pack(side="left", padx=5)
+        self.category_search_var = tk.StringVar()
+        self.category_search_entry = ttk.Entry(self.search_frame, textvariable=self.category_search_var)
+        self.category_search_entry.pack(side="left", padx=5, fill="x", expand=True)
+        self.category_search_entry.bind("<KeyRelease>", self.filter_treeview)
+
+        ttk.Label(self.search_frame, text="Rechercher Compteur :").pack(side="left", padx=5)
+        self.meter_search_var = tk.StringVar()
+        self.meter_search_entry = ttk.Entry(self.search_frame, textvariable=self.meter_search_var)
+        self.meter_search_entry.pack(side="left", padx=5, fill="x", expand=True)
+        self.meter_search_entry.bind("<KeyRelease>", self.filter_treeview)
+
+        ttk.Button(self.search_frame, text="Réinitialiser le tri", command=self.reset_sorting).pack(side="left", padx=10)
+
         self.compare_tree = ttk.Treeview(self.compare_frame, columns=("Month", "Category", "Meter", "Period1", "Period2", "Note2", "Difference", "TargetDiff"), show="headings")
-        self.compare_tree.heading("Month", text="Mois")
-        self.compare_tree.heading("Category", text="Catégorie")
-        self.compare_tree.heading("Meter", text="Compteur")
-        self.compare_tree.heading("Period1", text="Période 1")
-        self.compare_tree.heading("Period2", text="Période 2")
-        self.compare_tree.heading("Note2", text="Note (Période 2)")
-        self.compare_tree.heading("Difference", text="Différence")
-        self.compare_tree.heading("TargetDiff", text="Écart Objectif (%)")
+        self.compare_tree.heading("Month", text="Mois", command=lambda: self.sort_column("Month", False))
+        self.compare_tree.heading("Category", text="Catégorie", command=lambda: self.sort_column("Category", False))
+        self.compare_tree.heading("Meter", text="Compteur", command=lambda: self.sort_column("Meter", False))
+        self.compare_tree.heading("Period1", text="Période 1", command=lambda: self.sort_column("Period1", False))
+        self.compare_tree.heading("Period2", text="Période 2", command=lambda: self.sort_column("Period2", False))
+        self.compare_tree.heading("Note2", text="Note (Période 2)", command=lambda: self.sort_column("Note2", False))
+        self.compare_tree.heading("Difference", text="Différence", command=lambda: self.sort_column("Difference", False))
+        self.compare_tree.heading("TargetDiff", text="Écart Objectif (%)", command=lambda: self.sort_column("TargetDiff", False))
         self.compare_tree.column("Month", width=100)
         self.compare_tree.column("Category", width=200)
         self.compare_tree.column("Meter", width=150)
@@ -154,6 +171,50 @@ class MeterConsumptionApp:
         self.compare_tree.column("Difference", width=100)
         self.compare_tree.column("TargetDiff", width=120)
         self.compare_tree.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.compare_tree.tag_configure("positive", background="#ffcccc")
+        self.compare_tree.tag_configure("negative", background="#ccffcc")
+
+        self.original_data = []
+
+    def sort_column(self, col, reverse):
+        items = [(self.compare_tree.set(item, col), item) for item in self.compare_tree.get_children()]
+        if col in ("Period1", "Period2", "Difference"):
+            items.sort(key=lambda x: float(x[0].replace(" ", "").replace("+", "") if x[0] else "0"), reverse=reverse)
+        elif col == "TargetDiff":
+            items.sort(key=lambda x: float(x[0].replace("%", "").replace("+", "") if x[0] else "0"), reverse=reverse)
+        else:
+            items.sort(reverse=reverse)
+        for index, (value, item) in enumerate(items):
+            self.compare_tree.move(item, "", index)
+        self.compare_tree.heading(col, command=lambda: self.sort_column(col, not reverse))
+
+    def reset_sorting(self):
+        for item in self.compare_tree.get_children():
+            self.compare_tree.delete(item)
+        for row in self.original_data:
+            tags = []
+            difference = row[6].replace(" ", "").replace("+", "")
+            if difference and float(difference) > 0:
+                tags.append("positive")
+            elif difference and float(difference) < 0:
+                tags.append("negative")
+            self.compare_tree.insert("", tk.END, values=row, tags=tags)
+
+    def filter_treeview(self, event):
+        category_search = self.category_search_var.get().lower()
+        meter_search = self.meter_search_var.get().lower()
+        for item in self.compare_tree.get_children():
+            self.compare_tree.delete(item)
+        for row in self.original_data:
+            if (not category_search or category_search in row[1].lower()) and (not meter_search or meter_search in row[2].lower()):
+                tags = []
+                difference = row[6].replace(" ", "").replace("+", "")
+                if difference and float(difference) > 0:
+                    tags.append("positive")
+                elif difference and float(difference) < 0:
+                    tags.append("negative")
+                self.compare_tree.insert("", tk.END, values=row, tags=tags)
 
     def export_to_csv(self):
         if not self.compare_tree.get_children():
@@ -184,6 +245,7 @@ class MeterConsumptionApp:
     def compare_periods(self):
         for item in self.compare_tree.get_children():
             self.compare_tree.delete(item)
+        self.original_data.clear()
 
         period1_start_year = self.compare1_start_year_var.get()
         period1_start_month = self.compare1_start_month_var.get()
@@ -231,7 +293,6 @@ class MeterConsumptionApp:
             messagebox.showwarning("Erreur", "L'objectif doit être un nombre.")
             return
 
-        # Récupérer les consommations au lieu des index
         self.cursor.execute("SELECT meter_id, date, consumption FROM readings WHERE date BETWEEN ? AND ? ORDER BY date", (period1_start_date, period1_end_date))
         period1_readings = self.cursor.fetchall()
         self.cursor.execute("SELECT meter_id, date, consumption, note FROM readings WHERE date BETWEEN ? AND ? ORDER BY date", (period2_start_date, period2_end_date))
@@ -241,14 +302,14 @@ class MeterConsumptionApp:
 
         if is_monthly:
             self.compare_tree["columns"] = ("Month", "Category", "Meter", "Period1", "Period2", "Note2", "Difference", "TargetDiff")
-            self.compare_tree.heading("Month", text="Mois")
-            self.compare_tree.heading("Category", text="Catégorie")
-            self.compare_tree.heading("Meter", text="Compteur")
-            self.compare_tree.heading("Period1", text="Période 1")
-            self.compare_tree.heading("Period2", text="Période 2")
-            self.compare_tree.heading("Note2", text="Note (Période 2)")
-            self.compare_tree.heading("Difference", text="Différence")
-            self.compare_tree.heading("TargetDiff", text="Écart Objectif (%)")
+            self.compare_tree.heading("Month", text="Mois", command=lambda: self.sort_column("Month", False))
+            self.compare_tree.heading("Category", text="Catégorie", command=lambda: self.sort_column("Category", False))
+            self.compare_tree.heading("Meter", text="Compteur", command=lambda: self.sort_column("Meter", False))
+            self.compare_tree.heading("Period1", text="Période 1", command=lambda: self.sort_column("Period1", False))
+            self.compare_tree.heading("Period2", text="Période 2", command=lambda: self.sort_column("Period2", False))
+            self.compare_tree.heading("Note2", text="Note (Période 2)", command=lambda: self.sort_column("Note2", False))
+            self.compare_tree.heading("Difference", text="Différence", command=lambda: self.sort_column("Difference", False))
+            self.compare_tree.heading("TargetDiff", text="Écart Objectif (%)", command=lambda: self.sort_column("TargetDiff", False))
             self.compare_tree.column("Month", width=100)
             self.compare_tree.column("Category", width=200)
             self.compare_tree.column("Meter", width=150)
@@ -405,7 +466,7 @@ class MeterConsumptionApp:
 
                         meter_list.sort(key=lambda x: (-x[0].count(">"), x[0], x[1]))
                         for category_name, meter_name, consumption1, consumption2, note2, difference, target_diff in meter_list:
-                            self.compare_tree.insert("", tk.END, values=(
+                            row = (
                                 f"{month1} vs {month2}",
                                 category_name,
                                 meter_name,
@@ -414,7 +475,14 @@ class MeterConsumptionApp:
                                 note2,
                                 f"{difference:+,}".replace(",", " "),
                                 f"{target_diff:+.2f}%"
-                            ))
+                            )
+                            tags = []
+                            if difference > 0:
+                                tags.append("positive")
+                            elif difference < 0:
+                                tags.append("negative")
+                            self.compare_tree.insert("", tk.END, values=row, tags=tags)
+                            self.original_data.append(row)
 
                     if grouping_level > 1:
                         category_list = []
@@ -432,7 +500,7 @@ class MeterConsumptionApp:
 
                         category_list.sort(key=lambda x: (-x[0].count(">"), x[0]))
                         for category_name, total1, total2, note2, difference, target_diff in category_list:
-                            self.compare_tree.insert("", tk.END, values=(
+                            row = (
                                 f"{month1} vs {month2}",
                                 category_name,
                                 "Sous-total",
@@ -441,13 +509,20 @@ class MeterConsumptionApp:
                                 note2,
                                 f"{difference:+,}".replace(",", " "),
                                 f"{target_diff:+.2f}%"
-                            ))
+                            )
+                            tags = []
+                            if difference > 0:
+                                tags.append("positive")
+                            elif difference < 0:
+                                tags.append("negative")
+                            self.compare_tree.insert("", tk.END, values=row, tags=tags)
+                            self.original_data.append(row)
 
                     total1 = top_level_totals_by_month1[month1][top_level_category]
                     total2 = top_level_totals_by_month2[month2][top_level_category]
                     difference = total2 - total1
                     target_diff = ((total2 - total1) / total1 * 100) if total1 > 0 else (float('inf') if total2 > 0 else 0)
-                    self.compare_tree.insert("", tk.END, values=(
+                    row = (
                         f"{month1} vs {month2}",
                         top_level_category,
                         "Total",
@@ -456,19 +531,26 @@ class MeterConsumptionApp:
                         "",
                         f"{difference:+,}".replace(",", " "),
                         f"{target_diff:+.2f}%"
-                    ))
+                    )
+                    tags = []
+                    if difference > 0:
+                        tags.append("positive")
+                    elif difference < 0:
+                        tags.append("negative")
+                    self.compare_tree.insert("", tk.END, values=row, tags=tags)
+                    self.original_data.append(row)
 
             self.show_graphs_in_new_window(grouping_level, graph_data_by_month, period1_start_date, period1_end_date, period2_start_date, period2_end_date, is_monthly=True)
 
         else:
             self.compare_tree["columns"] = ("Category", "Meter", "Period1", "Period2", "Note2", "Difference", "TargetDiff")
-            self.compare_tree.heading("Category", text="Catégorie")
-            self.compare_tree.heading("Meter", text="Compteur")
-            self.compare_tree.heading("Period1", text="Période 1")
-            self.compare_tree.heading("Period2", text="Période 2")
-            self.compare_tree.heading("Note2", text="Note (Période 2)")
-            self.compare_tree.heading("Difference", text="Différence")
-            self.compare_tree.heading("TargetDiff", text="Écart Objectif (%)")
+            self.compare_tree.heading("Category", text="Catégorie", command=lambda: self.sort_column("Category", False))
+            self.compare_tree.heading("Meter", text="Compteur", command=lambda: self.sort_column("Meter", False))
+            self.compare_tree.heading("Period1", text="Période 1", command=lambda: self.sort_column("Period1", False))
+            self.compare_tree.heading("Period2", text="Période 2", command=lambda: self.sort_column("Period2", False))
+            self.compare_tree.heading("Note2", text="Note (Période 2)", command=lambda: self.sort_column("Note2", False))
+            self.compare_tree.heading("Difference", text="Différence", command=lambda: self.sort_column("Difference", False))
+            self.compare_tree.heading("TargetDiff", text="Écart Objectif (%)", command=lambda: self.sort_column("TargetDiff", False))
             self.compare_tree.column("Category", width=200)
             self.compare_tree.column("Meter", width=150)
             self.compare_tree.column("Period1", width=100)
@@ -587,7 +669,7 @@ class MeterConsumptionApp:
 
                     meter_list.sort(key=lambda x: (-x[0].count(">"), x[0], x[1]))
                     for category_name, meter_name, consumption1, consumption2, note2, difference, target_diff in meter_list:
-                        self.compare_tree.insert("", tk.END, values=(
+                        row = (
                             category_name,
                             meter_name,
                             f"{consumption1:,}".replace(",", " "),
@@ -595,7 +677,14 @@ class MeterConsumptionApp:
                             note2,
                             f"{difference:+,}".replace(",", " "),
                             f"{target_diff:+.2f}%"
-                        ))
+                        )
+                        tags = []
+                        if difference > 0:
+                            tags.append("positive")
+                        elif difference < 0:
+                            tags.append("negative")
+                        self.compare_tree.insert("", tk.END, values=row, tags=tags)
+                        self.original_data.append(row)
 
                 if grouping_level > 1:
                     category_list = []
@@ -613,7 +702,7 @@ class MeterConsumptionApp:
 
                     category_list.sort(key=lambda x: (-x[0].count(">"), x[0]))
                     for category_name, total1, total2, note2, difference, target_diff in category_list:
-                        self.compare_tree.insert("", tk.END, values=(
+                        row = (
                             category_name,
                             "Sous-total",
                             f"{total1:,}".replace(",", " "),
@@ -621,13 +710,20 @@ class MeterConsumptionApp:
                             note2,
                             f"{difference:+,}".replace(",", " "),
                             f"{target_diff:+.2f}%"
-                        ))
+                        )
+                        tags = []
+                        if difference > 0:
+                            tags.append("positive")
+                        elif difference < 0:
+                            tags.append("negative")
+                        self.compare_tree.insert("", tk.END, values=row, tags=tags)
+                        self.original_data.append(row)
 
                 total1 = top_level_totals1[top_level_category]
                 total2 = top_level_totals2[top_level_category]
                 difference = total2 - total1
                 target_diff = ((total2 - total1) / total1 * 100) if total1 > 0 else (float('inf') if total2 > 0 else 0)
-                self.compare_tree.insert("", tk.END, values=(
+                row = (
                     top_level_category,
                     "Total",
                     f"{total1:,}".replace(",", " "),
@@ -635,7 +731,14 @@ class MeterConsumptionApp:
                     "",
                     f"{difference:+,}".replace(",", " "),
                     f"{target_diff:+.2f}%"
-                ))
+                )
+                tags = []
+                if difference > 0:
+                    tags.append("positive")
+                elif difference < 0:
+                    tags.append("negative")
+                self.compare_tree.insert("", tk.END, values=row, tags=tags)
+                self.original_data.append(row)
 
             self.show_graphs_in_new_window(grouping_level, None, period1_start_date, period1_end_date, period2_start_date, period2_end_date, is_monthly=False, graph_data_cumulative={
                 "12": {"period1": graph_data_12_1, "period2": graph_data_12_2},
