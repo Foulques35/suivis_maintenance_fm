@@ -42,12 +42,13 @@ class MeterReadingApp:
         self.setup_config_tab()
 
     def create_readings_table(self):
-        """Crée les tables nécessaires."""
+        """Crée les tables nécessaires et ajoute la colonne 'note' si elle n'existe pas."""
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS readings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             meter_id INTEGER,
             date TEXT NOT NULL,
             meter_index INTEGER NOT NULL,
+            note TEXT,
             FOREIGN KEY (meter_id) REFERENCES meters(id)
         )''')
         self.cursor.execute('''CREATE TABLE IF NOT EXISTS base_indices (
@@ -55,6 +56,12 @@ class MeterReadingApp:
             base_index INTEGER NOT NULL,
             FOREIGN KEY (meter_id) REFERENCES meters(id)
         )''')
+        # Ajouter la colonne 'note' si elle n'existe pas déjà
+        try:
+            self.cursor.execute("ALTER TABLE readings ADD COLUMN note TEXT")
+        except sqlite3.OperationalError:
+            # La colonne existe déjà, pas d'erreur
+            pass
         self.conn.commit()
 
     def load_meters(self):
@@ -84,15 +91,12 @@ class MeterReadingApp:
 
     def setup_readings_tab(self):
         """Configure l'onglet Relevés."""
-        # Frame principal divisé en deux parties (gauche : compteurs, droite : relevés)
         self.readings_main_frame = ttk.PanedWindow(self.readings_frame, orient=tk.HORIZONTAL)
         self.readings_main_frame.pack(fill="both", expand=True)
 
-        # Partie gauche : Treeview pour sélectionner les compteurs
         self.meters_frame = ttk.LabelFrame(self.readings_main_frame, text="Sélectionner un Compteur")
         self.readings_main_frame.add(self.meters_frame, weight=1)
 
-        # Barres de recherche pour les compteurs
         search_frame = ttk.Frame(self.meters_frame)
         search_frame.pack(fill="x", pady=5)
 
@@ -106,7 +110,6 @@ class MeterReadingApp:
         self.meters_name_search_entry.pack(side="left", fill="x", expand=True, padx=5)
         self.meters_name_search_entry.bind("<KeyRelease>", self.filter_meters)
 
-        # Treeview pour les compteurs
         self.meters_tree = ttk.Treeview(self.meters_frame, columns=("Category", "Meter"), show="headings")
         self.meters_tree.heading("Category", text="Catégorie", command=lambda: self.sort_column(self.meters_tree, "Category", False))
         self.meters_tree.heading("Meter", text="Compteur", command=lambda: self.sort_column(self.meters_tree, "Meter", False))
@@ -116,11 +119,9 @@ class MeterReadingApp:
 
         self.meters_tree.bind("<<TreeviewSelect>>", self.load_selected_meter)
 
-        # Partie droite : Formulaire, barre de recherche et Treeview pour les relevés
         self.readings_right_frame = ttk.Frame(self.readings_main_frame)
         self.readings_main_frame.add(self.readings_right_frame, weight=2)
 
-        # Formulaire pour ajouter/modifier un relevé (placé en haut)
         self.readings_form_frame = ttk.LabelFrame(self.readings_right_frame, text="Ajouter/Modifier un Relevé")
         self.readings_form_frame.pack(fill="x", pady=5)
 
@@ -128,14 +129,12 @@ class MeterReadingApp:
         self.reading_month_var = tk.StringVar()
         self.reading_month_combobox = ttk.Combobox(self.readings_form_frame, textvariable=self.reading_month_var, values=[f"{i:02d}" for i in range(1, 13)], width=5)
         self.reading_month_combobox.grid(row=0, column=1, padx=5, pady=5)
-        self.reading_month_combobox.set(datetime.now().month)
         self.reading_month_combobox.bind("<<ComboboxSelected>>", self.update_reading)
 
         ttk.Label(self.readings_form_frame, text="Année :").grid(row=0, column=2, padx=5, pady=5, sticky="w")
         self.reading_year_var = tk.StringVar()
         self.reading_year_combobox = ttk.Combobox(self.readings_form_frame, textvariable=self.reading_year_var, values=[str(i) for i in range(2000, 2030)], width=7)
         self.reading_year_combobox.grid(row=0, column=3, padx=5, pady=5)
-        self.reading_year_combobox.set(datetime.now().year)
         self.reading_year_combobox.bind("<<ComboboxSelected>>", self.update_reading)
 
         ttk.Label(self.readings_form_frame, text="Index :").grid(row=1, column=0, padx=5, pady=5, sticky="w")
@@ -144,10 +143,15 @@ class MeterReadingApp:
         self.reading_index_entry.grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
         self.reading_index_var.trace("w", self.update_reading)
 
-        ttk.Button(self.readings_form_frame, text="Nouveau", command=self.clear_reading_form).grid(row=2, column=0, padx=5, pady=5)
-        ttk.Button(self.readings_form_frame, text="Supprimer", command=self.delete_reading).grid(row=2, column=1, padx=5, pady=5)
+        ttk.Label(self.readings_form_frame, text="Note :").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        self.reading_note_var = tk.StringVar()
+        self.reading_note_entry = ttk.Entry(self.readings_form_frame, textvariable=self.reading_note_var)
+        self.reading_note_entry.grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
+        self.reading_note_var.trace("w", self.update_reading)
 
-        # Barre de recherche et filtre par date (placé sous le formulaire)
+        ttk.Button(self.readings_form_frame, text="Nouveau", command=self.clear_reading_form).grid(row=3, column=0, padx=5, pady=5)
+        ttk.Button(self.readings_form_frame, text="Supprimer", command=self.delete_reading).grid(row=3, column=1, padx=5, pady=5)
+
         self.readings_filter_frame = ttk.Frame(self.readings_right_frame)
         self.readings_filter_frame.pack(fill="x", pady=5)
 
@@ -163,21 +167,22 @@ class MeterReadingApp:
         self.date_filter_combobox.set("Aucun")
         self.date_filter_combobox.bind("<<ComboboxSelected>>", self.filter_readings)
 
-        # Treeview pour les relevés (placé en bas)
         self.readings_tree_frame = ttk.Frame(self.readings_right_frame)
         self.readings_tree_frame.pack(fill="both", expand=True)
 
-        self.readings_tree = ttk.Treeview(self.readings_tree_frame, columns=("ID", "Date", "Meter", "Index", "Consumption"), show="headings")
+        self.readings_tree = ttk.Treeview(self.readings_tree_frame, columns=("ID", "Date", "Meter", "Index", "Consumption", "Note"), show="headings")
         self.readings_tree.heading("ID", text="ID")
         self.readings_tree.heading("Date", text="Date")
         self.readings_tree.heading("Meter", text="Compteur")
         self.readings_tree.heading("Index", text="Index")
         self.readings_tree.heading("Consumption", text="Consommation")
+        self.readings_tree.heading("Note", text="Note")
         self.readings_tree.column("ID", width=50)
         self.readings_tree.column("Date", width=100)
         self.readings_tree.column("Meter", width=150)
         self.readings_tree.column("Index", width=100)
         self.readings_tree.column("Consumption", width=100)
+        self.readings_tree.column("Note", width=150)
         self.readings_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
         self.readings_tree.bind("<<TreeviewSelect>>", self.load_reading_to_form)
@@ -186,14 +191,14 @@ class MeterReadingApp:
         self.current_reading_id = None
         self.current_meter_id = None
         self.load_meters_to_tree()
+        self.reading_month_var.set(f"{datetime.now().month:02d}")
+        self.reading_year_var.set(str(datetime.now().year))
 
     def setup_config_tab(self):
         """Configure l'onglet Configuration."""
-        # Frame pour le Treeview et la barre de recherche
         self.config_tree_frame = ttk.Frame(self.config_frame)
         self.config_tree_frame.pack(fill="both", expand=True)
 
-        # Barre de recherche
         search_frame = ttk.Frame(self.config_tree_frame)
         search_frame.pack(fill="x", pady=5)
         ttk.Label(search_frame, text="Rechercher :").pack(side="left")
@@ -201,7 +206,6 @@ class MeterReadingApp:
         self.config_search_entry.pack(side="left", fill="x", expand=True, padx=5)
         self.config_search_entry.bind("<KeyRelease>", self.filter_config)
 
-        # Treeview pour les index de base
         self.config_tree = ttk.Treeview(self.config_tree_frame, columns=("Category", "Meter", "BaseIndex"), show="headings")
         self.config_tree.heading("Category", text="Catégorie")
         self.config_tree.heading("Meter", text="Compteur")
@@ -249,8 +253,17 @@ class MeterReadingApp:
             if (not category_search or category_search in category_name.lower()) and (not name_search or name_search in meter[1].lower()):
                 self.meters_tree.insert("", tk.END, values=(category_name, meter[1]), tags=(meter_id,))
 
+    def get_last_reading_date(self, meter_id):
+        """Récupère la date du dernier relevé pour un compteur donné."""
+        self.cursor.execute("SELECT date FROM readings WHERE meter_id=? ORDER BY date DESC LIMIT 1", (meter_id,))
+        result = self.cursor.fetchone()
+        if result:
+            year, month = result[0].split("-")
+            return month, year
+        return None, None
+
     def load_selected_meter(self, event):
-        """Charge le compteur sélectionné dans le formulaire."""
+        """Charge le compteur sélectionné dans le formulaire et met à jour les champs avec la dernière date."""
         selected = self.meters_tree.selection()
         if not selected:
             return
@@ -258,6 +271,14 @@ class MeterReadingApp:
         item = self.meters_tree.item(selected[0])
         self.current_meter_id = item["tags"][0]
         self.load_readings()
+
+        last_month, last_year = self.get_last_reading_date(self.current_meter_id)
+        if last_month and last_year:
+            self.reading_month_var.set(last_month)
+            self.reading_year_var.set(last_year)
+        else:
+            self.reading_month_var.set(f"{datetime.now().month:02d}")
+            self.reading_year_var.set(str(datetime.now().year))
 
     def load_readings(self):
         """Charge les relevés dans le Treeview."""
@@ -267,21 +288,20 @@ class MeterReadingApp:
         if not self.current_meter_id:
             return
 
-        # Charger l'index de base
         self.cursor.execute("SELECT base_index FROM base_indices WHERE meter_id=?", (self.current_meter_id,))
         base_index = self.cursor.fetchone()
         base_index = base_index[0] if base_index else 0
 
-        # Charger les relevés
-        self.cursor.execute("SELECT id, meter_id, date, meter_index FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
+        self.cursor.execute("SELECT id, meter_id, date, meter_index, note FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
         readings = self.cursor.fetchall()
 
         prev_index = base_index
         for reading in readings:
-            reading_id, meter_id, date, index = reading
+            reading_id, meter_id, date, index, note = reading
             meter_name = next((meter[1] for meter in self.meters if meter[0] == meter_id), "Inconnu")
             consumption = index - prev_index if index >= prev_index else 0
-            self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption), tags=(index,))
+            note = note if note is not None else ""
+            self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption, note), tags=(index,))
             prev_index = index
 
     def filter_readings(self, event=None):
@@ -295,12 +315,10 @@ class MeterReadingApp:
         if not self.current_meter_id:
             return
 
-        # Charger l'index de base
         self.cursor.execute("SELECT base_index FROM base_indices WHERE meter_id=?", (self.current_meter_id,))
         base_index = self.cursor.fetchone()
         base_index = base_index[0] if base_index else 0
 
-        # Déterminer la plage de dates selon le filtre
         now = datetime.now()
         if date_filter == "Ce mois-ci":
             start_date = f"{now.year}-{now.month:02d}"
@@ -316,21 +334,22 @@ class MeterReadingApp:
             last_year = now.year - 1
             start_date = f"{last_year}-01"
             end_date = f"{last_year}-12"
-        else:  # Aucun
+        else:
             start_date = "0000-00"
             end_date = "9999-99"
 
-        # Charger les relevés
-        self.cursor.execute("SELECT id, meter_id, date, meter_index FROM readings WHERE meter_id=? AND date BETWEEN ? AND ? ORDER BY date", (self.current_meter_id, start_date, end_date))
+        self.cursor.execute("SELECT id, meter_id, date, meter_index, note FROM readings WHERE meter_id=? AND date BETWEEN ? AND ? ORDER BY date", (self.current_meter_id, start_date, end_date))
         readings = self.cursor.fetchall()
 
         prev_index = base_index
         for reading in readings:
-            reading_id, meter_id, date, index = reading
+            reading_id, meter_id, date, index, note = reading
             meter_name = next((meter[1] for meter in self.meters if meter[0] == meter_id), "Inconnu")
             consumption = index - prev_index if index >= prev_index else 0
-            if search_term in date.lower() or search_term in meter_name.lower() or search_term in str(index) or search_term in str(consumption):
-                self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption), tags=(index,))
+            note = note if note is not None else ""
+            if (search_term in date.lower() or search_term in meter_name.lower() or 
+                search_term in str(index) or search_term in str(consumption) or search_term in note.lower()):
+                self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, index, consumption, note), tags=(index,))
             prev_index = index
 
     def load_reading_to_form(self, event):
@@ -347,8 +366,11 @@ class MeterReadingApp:
         self.reading_month_var.set(month)
         self.reading_year_var.set(year)
 
-        index = str(item[3])  # Convertir en chaîne pour éviter l'erreur
+        index = str(item[3])
         self.reading_index_var.set(index)
+
+        note = item[5] if len(item) > 5 else ""
+        self.reading_note_var.set(note)
 
     def edit_reading(self, event):
         """Permet d'éditer un relevé directement dans le Treeview."""
@@ -359,10 +381,9 @@ class MeterReadingApp:
         item = self.readings_tree.item(selected[0])
         reading_id = item["values"][0]
         column = self.readings_tree.identify_column(event.x)
-        if column not in ("#2", "#4"):  # Colonnes "Date" et "Index"
+        if column not in ("#2", "#4", "#6"):  # Date, Index, Note
             return
 
-        # Créer une entrée pour éditer
         entry = ttk.Entry(self.readings_tree)
         entry.place(x=event.x, y=event.y, width=100)
         entry.insert(0, item["values"][int(column[1]) - 1])
@@ -386,6 +407,8 @@ class MeterReadingApp:
                     entry.destroy()
                     return
                 self.cursor.execute("UPDATE readings SET meter_index=? WHERE id=?", (int(new_value), reading_id))
+            elif column == "#6":  # Note
+                self.cursor.execute("UPDATE readings SET note=? WHERE id=?", (new_value, reading_id))
 
             self.conn.commit()
             self.load_readings()
@@ -411,24 +434,35 @@ class MeterReadingApp:
         index = int(index)
 
         date = f"{year}-{month}"
+        note = self.reading_note_var.get()
 
         if self.current_reading_id:
-            # Mise à jour d'un relevé existant
-            self.cursor.execute("UPDATE readings SET meter_id=?, date=?, meter_index=? WHERE id=?", (self.current_meter_id, date, index, self.current_reading_id))
+            self.cursor.execute("UPDATE readings SET meter_id=?, date=?, meter_index=?, note=? WHERE id=?", 
+                               (self.current_meter_id, date, index, note, self.current_reading_id))
         else:
-            # Ajout d'un nouveau relevé
-            self.cursor.execute("INSERT INTO readings (meter_id, date, meter_index) VALUES (?, ?, ?)", (self.current_meter_id, date, index))
+            self.cursor.execute("INSERT INTO readings (meter_id, date, meter_index, note) VALUES (?, ?, ?, ?)", 
+                               (self.current_meter_id, date, index, note))
             self.current_reading_id = self.cursor.lastrowid
 
         self.conn.commit()
         self.load_readings()
 
     def clear_reading_form(self):
-        """Réinitialise le formulaire pour un nouveau relevé."""
+        """Réinitialise le formulaire pour un nouveau relevé avec la dernière date du compteur sélectionné."""
         self.current_reading_id = None
-        self.reading_month_var.set(datetime.now().month)
-        self.reading_year_var.set(datetime.now().year)
+        if self.current_meter_id:
+            last_month, last_year = self.get_last_reading_date(self.current_meter_id)
+            if last_month and last_year:
+                self.reading_month_var.set(last_month)
+                self.reading_year_var.set(last_year)
+            else:
+                self.reading_month_var.set(f"{datetime.now().month:02d}")
+                self.reading_year_var.set(str(datetime.now().year))
+        else:
+            self.reading_month_var.set(f"{datetime.now().month:02d}")
+            self.reading_year_var.set(str(datetime.now().year))
         self.reading_index_var.set("")
+        self.reading_note_var.set("")
 
     def delete_reading(self):
         """Supprime un relevé sélectionné."""
@@ -483,10 +517,9 @@ class MeterReadingApp:
         item = self.config_tree.item(selected[0])
         meter_id = item["tags"][0]
         column = self.config_tree.identify_column(event.x)
-        if column != "#3":  # Colonne "Index de Base"
+        if column != "#3":
             return
 
-        # Créer une entrée pour éditer
         entry = ttk.Entry(self.config_tree)
         entry.place(x=event.x, y=event.y, width=100)
 
