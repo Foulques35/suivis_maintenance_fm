@@ -5,6 +5,7 @@ import shutil
 from datetime import datetime, timedelta
 import sqlite3
 import zipfile
+import sys
 
 class DBManager:
     def __init__(self, parent, conn_audit, db_path_audit, conn_compteurs, db_path_compteurs, conn_tasks, db_path_tasks, conn_library, db_path_library, update_callback=None):
@@ -19,8 +20,10 @@ class DBManager:
         self.db_path_library = db_path_library
         self.update_callback = update_callback
 
-        # Définir les chemins absolus pour les dossiers et fichiers
-        self.project_root = "/home/aszune/Téléchargements/SRC-3"
+        # Définir le chemin de base comme le dossier de l'exécutable
+        self.project_root = os.path.dirname(os.path.abspath(sys.argv[0]))
+        
+        # Définir les chemins relatifs pour les dossiers et fichiers
         self.config_file = os.path.join(self.project_root, "config.ini")
         self.nomenclatures_file = os.path.join(self.project_root, "nomenclatures.json")
         self.sites_file = os.path.join(self.project_root, "sites.json")
@@ -76,6 +79,32 @@ class DBManager:
 
         # Vérifier si un rappel d'export est nécessaire
         self.check_export_reminder()
+
+        # Mettre à jour la structure de la table parameters pour ajouter les colonnes manquantes
+        self.migrate_parameters_table()
+
+    def migrate_parameters_table(self):
+        """Ajoute les colonnes manquantes à la table parameters si elles n'existent pas."""
+        if self.conn_audit:
+            cursor = self.conn_audit.cursor()
+            # Vérifier si la table parameters existe
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='parameters'")
+            if cursor.fetchone():
+                # Vérifier les colonnes existantes
+                cursor.execute("PRAGMA table_info(parameters)")
+                columns = [col[1] for col in cursor.fetchall()]
+                
+                # Ajouter la colonne target si elle n'existe pas
+                if "target" not in columns:
+                    cursor.execute("ALTER TABLE parameters ADD COLUMN target REAL")
+                    print("Colonne 'target' ajoutée à la table parameters.")
+                
+                # Ajouter la colonne max_value si elle n'existe pas
+                if "max_value" not in columns:
+                    cursor.execute("ALTER TABLE parameters ADD COLUMN max_value REAL")
+                    print("Colonne 'max_value' ajoutée à la table parameters.")
+                
+                self.conn_audit.commit()
 
     def get_last_export_date(self):
         """Récupère la date du dernier export global à partir du fichier last_export.txt."""

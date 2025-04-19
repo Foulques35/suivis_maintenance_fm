@@ -15,13 +15,12 @@ class MeterReadings:
         self.cursor = None if conn is None else conn.cursor()
         self.current_meter_id = None
         self.current_reading_id = None
-        self.last_parameter = {}  # Stocke le dernier paramètre par compteur
-        self.parameter_map = {}   # Mappe les noms des paramètres à leurs IDs
-        self.form_locked = True  # État de verrouillage du formulaire (verrouillé par défaut)
-        self.sort_column = None  # Colonne actuellement triée dans les Treeviews
-        self.sort_reverse = False  # Direction du tri (False = ascendant, True = descendant)
+        self.last_parameter = {}
+        self.parameter_map = {}
+        self.form_locked = True
+        self.sort_column = None
+        self.sort_reverse = False
 
-        # PanedWindow principal
         self.main_frame = ttk.PanedWindow(self.parent, orient=tk.HORIZONTAL)
         self.main_frame.pack(fill="both", expand=True)
 
@@ -39,7 +38,7 @@ class MeterReadings:
         self.meters_tree = ttk.Treeview(self.meters_frame, columns=("Category", "Meter"), show="headings")
         self.meters_tree.heading("Category", text="Catégorie", command=lambda: self.sort_treeview(self.meters_tree, "Category", False))
         self.meters_tree.heading("Meter", text="Compteur", command=lambda: self.sort_treeview(self.meters_tree, "Meter", False))
-        self.meters_tree.column("Category", width=300)  # Élargir pour les chemins de catégories
+        self.meters_tree.column("Category", width=300)
         self.meters_tree.column("Meter", width=100)
         self.meters_tree.pack(fill="both", expand=True, padx=5, pady=5)
         self.meters_tree.bind("<<TreeviewSelect>>", self.load_selected_meter)
@@ -51,7 +50,6 @@ class MeterReadings:
         self.form_frame = ttk.LabelFrame(self.right_frame, text="Ajouter un Relevé")
         self.right_frame.add(self.form_frame, weight=1)
 
-        # Formulaire aligné avec une grille
         form_grid = ttk.Frame(self.form_frame)
         form_grid.pack(fill="x", padx=5, pady=5)
 
@@ -88,7 +86,6 @@ class MeterReadings:
         self.note_entry = ttk.Entry(form_grid, textvariable=self.note_var, width=30)
         self.note_entry.grid(row=4, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
 
-        # Labels pour Min et Max
         self.target_frame = ttk.Frame(self.form_frame)
         self.target_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(self.target_frame, text="Min:").pack(side="left")
@@ -101,40 +98,28 @@ class MeterReadings:
         self.unit_label = ttk.Label(self.target_frame, text="-")
         self.unit_label.pack(side="left", padx=5)
 
-        # Boutons d'action avec couleurs
         buttons_frame = ttk.Frame(self.form_frame)
         buttons_frame.pack(fill="x", padx=5, pady=5)
-        # Bouton Ajouter Relevé (Bleu clair)
         ttk.Button(buttons_frame, text="Ajouter Relevé", command=self.add_reading, style="Blue.TButton").pack(side="left", padx=5)
-        # Bouton Enregistrer (Vert clair)
         ttk.Button(buttons_frame, text="Enregistrer", command=self.save_reading, style="Green.TButton").pack(side="left", padx=5)
-        # Bouton Modifier (Jaune clair)
         ttk.Button(buttons_frame, text="Modifier", command=self.edit_reading, style="Yellow.TButton").pack(side="left", padx=5)
-        # Bouton Supprimer (Rouge clair)
         ttk.Button(buttons_frame, text="Supprimer", command=self.delete_reading, style="Red.TButton").pack(side="left", padx=5)
-        # Bouton Ajouter Fichier (Bleu clair)
         ttk.Button(buttons_frame, text="Ajouter Fichier", command=self.add_file, style="Blue.TButton").pack(side="left", padx=5)
-        # Bouton Supprimer Fichier (Rouge clair)
         ttk.Button(buttons_frame, text="Supprimer Fichier", command=self.delete_file, style="Red.TButton").pack(side="left", padx=5)
-        # Bouton Ouvrir Fichier (Jaune clair)
         ttk.Button(buttons_frame, text="Ouvrir Fichier", command=self.open_file, style="Yellow.TButton").pack(side="left", padx=5)
 
-        # Définir les styles pour les couleurs des boutons
         style = ttk.Style()
-        style.configure("Green.TButton", background="#90EE90")  # Vert clair
-        style.configure("Yellow.TButton", background="#FFFFE0")  # Jaune clair
-        style.configure("Red.TButton", background="#FFB6C1")    # Rouge clair
-        style.configure("Blue.TButton", background="#ADD8E6")   # Bleu clair
+        style.configure("Green.TButton", background="#90EE90")
+        style.configure("Yellow.TButton", background="#FFFFE0")
+        style.configure("Red.TButton", background="#FFB6C1")
+        style.configure("Blue.TButton", background="#ADD8E6")
 
-        # Liste des relevés avec barre de recherche, filtrage par période et export CSV sur une seule ligne
         self.readings_frame = ttk.LabelFrame(self.right_frame, text="Relevés")
         self.right_frame.add(self.readings_frame, weight=2)
 
-        # Barre de recherche, filtrage par période et export CSV sur une seule ligne
         readings_control_frame = ttk.Frame(self.readings_frame)
         readings_control_frame.pack(fill="x", pady=5)
 
-        # Barre de recherche (à gauche)
         search_subframe = ttk.Frame(readings_control_frame)
         search_subframe.pack(side="left", padx=5)
         ttk.Label(search_subframe, text="Rechercher :").pack(side="left")
@@ -142,7 +127,6 @@ class MeterReadings:
         self.readings_search_entry.pack(side="left", padx=5)
         self.readings_search_entry.bind("<KeyRelease>", self.filter_readings)
 
-        # Filtrage par période (à gauche, à côté de la recherche)
         filter_subframe = ttk.Frame(readings_control_frame)
         filter_subframe.pack(side="left", padx=5)
         ttk.Label(filter_subframe, text="Filtrer par période :").pack(side="left")
@@ -152,7 +136,6 @@ class MeterReadings:
         self.date_filter_combobox.pack(side="left", padx=5)
         self.date_filter_combobox.bind("<<ComboboxSelected>>", self.filter_readings)
 
-        # Bouton Export CSV (à droite)
         export_subframe = ttk.Frame(readings_control_frame)
         export_subframe.pack(side="right", padx=5)
         ttk.Button(export_subframe, text="Exporter CSV", command=self.export_to_csv).pack(side="right")
@@ -177,28 +160,22 @@ class MeterReadings:
         self.readings_tree.column("Unit", width=50)
         self.readings_tree.column("Note", width=150)
         self.readings_tree.pack(fill="both", expand=True, padx=5, pady=5)
-        # Couleurs pour le surlignage conditionnel
         self.readings_tree.tag_configure("below", background="#ADD8E6")  # Bleu clair
         self.readings_tree.tag_configure("exceed", background="#FFB6C1")  # Rouge clair
         self.readings_tree.tag_configure("within", background="#90EE90")  # Vert clair
         self.readings_tree.tag_configure("ok", background="white")
         self.readings_tree.bind("<<TreeviewSelect>>", self.load_selected_reading)
 
-        # Liste des fichiers joints
         self.files_frame = ttk.LabelFrame(self.right_frame, text="Fichiers")
         self.right_frame.add(self.files_frame, weight=1)
 
         self.files_listbox = tk.Listbox(self.files_frame)
         self.files_listbox.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Verrouiller les champs au démarrage
         self.lock_form()
-
-        # Charger les compteurs
         self.load_meters_to_tree()
 
     def lock_form(self):
-        """Verrouille les champs du formulaire pour empêcher la modification."""
         self.form_locked = True
         self.meter_combobox.config(state="readonly")
         self.parameter_combobox.config(state="readonly")
@@ -209,10 +186,9 @@ class MeterReadings:
         self.note_entry.config(state="disabled")
 
     def unlock_form(self):
-        """Déverrouille les champs du formulaire pour permettre la modification."""
         self.form_locked = False
-        self.meter_combobox.config(state="readonly")  # Toujours readonly pour éviter de modifier le compteur
-        self.parameter_combobox.config(state="readonly")  # Toujours readonly pour éviter de modifier le paramètre
+        self.meter_combobox.config(state="readonly")
+        self.parameter_combobox.config(state="readonly")
         self.day_combobox.config(state="readonly")
         self.month_combobox.config(state="readonly")
         self.year_combobox.config(state="readonly")
@@ -220,44 +196,29 @@ class MeterReadings:
         self.note_entry.config(state="normal")
 
     def add_reading(self):
-        """Vide le formulaire et déverrouille les champs pour ajouter un nouveau relevé."""
-        self.clear_form()  # Vide le formulaire
-        self.unlock_form()  # Déverrouille les champs pour l'édition
+        self.update_parameters()  # Assurer que les paramètres sont chargés
+        self.clear_form()
+        self.unlock_form()
 
     def sort_treeview(self, tree, col, reverse):
-        """Trie les éléments d'un Treeview selon une colonne donnée."""
         if self.sort_column == col:
             self.sort_reverse = not self.sort_reverse
         else:
             self.sort_column = col
             self.sort_reverse = reverse
-
-        # Récupérer tous les éléments du Treeview
         items = [(tree.set(item, col), item) for item in tree.get_children()]
-        # Trier les éléments (en ignorant la casse pour les chaînes)
         items.sort(key=lambda x: x[0].lower() if isinstance(x[0], str) else x[0], reverse=self.sort_reverse)
-
-        # Réorganiser les éléments dans le Treeview
         for index, (value, item) in enumerate(items):
             tree.move(item, "", index)
-
-        # Mettre à jour l'en-tête pour permettre un nouveau tri
         tree.heading(col, command=lambda: self.sort_treeview(tree, col, not self.sort_reverse))
 
     def filter_readings(self, event=None):
-        """Filtre les relevés selon la recherche et la période sélectionnée."""
         search_term = self.readings_search_entry.get().lower()
         period = self.date_filter_var.get()
-
-        # Récupérer tous les relevés pour le compteur actuel
         self.cursor.execute("SELECT id, meter_id, parameter_id, date, value, note, attachment_path FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
         readings = self.cursor.fetchall()
-
-        # Effacer le Treeview
         for item in self.readings_tree.get_children():
             self.readings_tree.delete(item)
-
-        # Calculer les plages de dates pour le filtrage
         today = datetime.now()
         if period == "Ce mois-ci":
             start_date = today.replace(day=1)
@@ -273,19 +234,14 @@ class MeterReadings:
             last_year = today.year - 1
             start_date = datetime(last_year, 1, 1)
             end_date = datetime(last_year, 12, 31)
-        else:  # "Tous"
+        else:
             start_date = None
             end_date = None
-
-        # Afficher les relevés filtrés
         for reading_id, meter_id, param_id, date, value, note, attachment in readings:
-            # Filtrer par période
             reading_date = datetime.strptime(date, "%Y-%m-%d")
             if start_date and end_date:
                 if not (start_date <= reading_date <= end_date):
                     continue
-
-            # Récupérer les détails du relevé
             param_name = "-"
             unit = "-"
             min_val = "-"
@@ -295,15 +251,15 @@ class MeterReadings:
                 self.cursor.execute("SELECT name, unit, target, max_value FROM parameters WHERE id=?", (param_id,))
                 param_result = self.cursor.fetchone()
                 if param_result:
-                    param_name, unit, target, max_value = param_result
-                    min_val = str(target) if target is not None else "-"
+                    param_name, unit, target_val, max_value = param_result
+                    min_val = str(target_val) if target_val is not None else "-"
                     max_val = str(max_value) if max_value is not None else "-"
                     unit = unit or "-"
                     value_float = float(value)
-                    has_min = target is not None
+                    has_min = target_val is not None
                     has_max = max_value is not None
                     if has_min and has_max:
-                        min_float = float(target)
+                        min_float = float(target_val)
                         max_float = float(max_value)
                         if value_float < min_float:
                             tags = ("below",)
@@ -312,7 +268,7 @@ class MeterReadings:
                         else:
                             tags = ("within",)
                     elif has_min:
-                        min_float = float(target)
+                        min_float = float(target_val)
                         if value_float < min_float:
                             tags = ("below",)
                         else:
@@ -323,39 +279,29 @@ class MeterReadings:
                             tags = ("exceed",)
                         else:
                             tags = ("within",)
-
             self.cursor.execute("SELECT name FROM meters WHERE id=?", (meter_id,))
             meter_result = self.cursor.fetchone()
             if not meter_result:
                 continue
             meter_name = meter_result[0]
             note = note or ""
-
-            # Filtrer par recherche
             row_values = [str(reading_id), date, meter_name, param_name, str(value), min_val, max_val, unit, note]
             if search_term and not any(search_term in str(val).lower() for val in row_values):
                 continue
-
             self.readings_tree.insert("", tk.END, values=(reading_id, date, meter_name, param_name, value, min_val, max_val, unit, note), tags=tags)
 
     def export_to_csv(self):
-        """Exporte les relevés affichés dans le Treeview en fichier CSV."""
         file_path = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv"), ("All files", "*.*")])
         if not file_path:
             return
-
         try:
             with open(file_path, mode="w", newline="", encoding="utf-8") as file:
                 writer = csv.writer(file)
-                # Écrire les en-têtes
                 headers = ["ID", "Date", "Compteur", "Paramètre", "Valeur", "Min", "Max", "Unité", "Note"]
                 writer.writerow(headers)
-
-                # Écrire les lignes du Treeview
                 for item in self.readings_tree.get_children():
                     values = self.readings_tree.item(item, "values")
                     writer.writerow(values)
-
             messagebox.showinfo("Succès", f"Les relevés ont été exportés avec succès vers {file_path}.")
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de l'exportation : {str(e)}")
@@ -365,8 +311,6 @@ class MeterReadings:
             self.meters_tree.delete(item)
         if not self.conn or not self.cursor:
             return
-
-        # Requête pour récupérer le chemin complet des catégories (jusqu'à 3 niveaux)
         query = """
         SELECT m.id, m.name,
                COALESCE(c3.name || ' > ' || c2.name || ' > ' || c1.name,
@@ -380,7 +324,6 @@ class MeterReadings:
         """
         self.cursor.execute(query)
         meters = self.cursor.fetchall()
-
         meter_names = []
         for meter_id, meter_name, category_path in meters:
             self.meters_tree.insert("", tk.END, values=(category_path, meter_name), tags=(str(meter_id),))
@@ -395,8 +338,6 @@ class MeterReadings:
         search_term = self.search_entry.get().lower()
         for item in self.meters_tree.get_children():
             self.meters_tree.delete(item)
-
-        # Même requête que dans load_meters_to_tree pour la recherche
         query = """
         SELECT m.id, m.name,
                COALESCE(c3.name || ' > ' || c2.name || ' > ' || c1.name,
@@ -410,7 +351,6 @@ class MeterReadings:
         """
         self.cursor.execute(query)
         meters = self.cursor.fetchall()
-
         for meter_id, meter_name, category_path in meters:
             if search_term in category_path.lower() or search_term in meter_name.lower():
                 self.meters_tree.insert("", tk.END, values=(category_path, meter_name), tags=(str(meter_id),))
@@ -421,22 +361,15 @@ class MeterReadings:
             return
         meter_id = self.meters_tree.item(selected_item)["tags"][0]
         self.current_meter_id = int(meter_id)
-
-        # Mettre à jour le combobox des compteurs
         self.cursor.execute("SELECT m.name, c.name FROM meters m JOIN categories c ON m.category_id = c.id WHERE m.id=?", (self.current_meter_id,))
         meter_name, category_name = self.cursor.fetchone()
         self.meter_var.set(f"{meter_name} ({category_name})")
-
-        # Vider le formulaire lors de la sélection d'une nouvelle catégorie/compteur
         self.clear_form()
-
-        # Mettre à jour les paramètres et les relevés
         self.update_parameters()
         self.load_readings()
 
     def update_parameters(self, event=None):
         self.parameter_combobox["values"] = []
-        self.parameter_var.set("")
         self.parameter_map.clear()
         if not self.current_meter_id:
             return
@@ -448,12 +381,15 @@ class MeterReadings:
             self.parameter_map[param_name] = param_id
         self.parameter_combobox["values"] = param_names
         if param_names:
-            # Restaurer le dernier paramètre sélectionné pour ce compteur
+            # Toujours définir last_parameter pour garantir qu'un paramètre est sélectionné
             last_param = self.last_parameter.get(self.current_meter_id, param_names[0])
             if last_param in param_names:
                 self.parameter_var.set(last_param)
             else:
                 self.parameter_var.set(param_names[0])
+                self.last_parameter[self.current_meter_id] = param_names[0]
+        else:
+            self.parameter_var.set("")
         self.show_targets()
 
     def show_targets(self, event=None):
@@ -468,10 +404,14 @@ class MeterReadings:
             self.cursor.execute("SELECT target, max_value, unit FROM parameters WHERE id=?", (param_id,))
             result = self.cursor.fetchone()
             if result:
-                min_val, max_val, unit = result
-                self.min_label.config(text=str(min_val) if min_val is not None else "-")
-                self.max_label.config(text=str(max_val) if max_val is not None else "-")
+                target, max_value, unit = result
+                self.min_label.config(text=str(target) if target is not None else "-")
+                self.max_label.config(text=str(max_value) if max_value is not None else "-")
                 self.unit_label.config(text=unit if unit else "-")
+            else:
+                self.min_label.config(text="-")
+                self.max_label.config(text="-")
+                self.unit_label.config(text="-")
 
     def validate_date(self, year, month, day):
         try:
@@ -490,7 +430,6 @@ class MeterReadings:
         if self.form_locked:
             messagebox.showwarning("Erreur", "Veuillez d'abord déverrouiller les champs en cliquant sur Modifier ou Ajouter Relevé.")
             return
-
         meter_name = self.meter_var.get()
         param_name = self.parameter_var.get()
         day = self.day_var.get()
@@ -498,35 +437,34 @@ class MeterReadings:
         year = self.year_var.get()
         value = self.value_var.get()
         note = self.note_var.get()
-
-        # Validation des champs requis
         if not (meter_name and day and month and year and value):
             messagebox.showwarning("Erreur", "Remplissez tous les champs requis (compteur, date, valeur).")
             return
-
-        # Valider la date
+        if not param_name:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner un paramètre.")
+            return
         is_valid, error_message = self.validate_date(year, month, day)
         if not is_valid:
             messagebox.showwarning("Erreur", f"Date invalide : {error_message}")
             return
-
         date = f"{year}-{month}-{day}"
-
         try:
             value = float(value)
-            param_id = self.parameter_map.get(param_name) if param_name else None
-            if param_id:
-                self.cursor.execute("SELECT target, max_value FROM parameters WHERE id=?", (param_id,))
-                result = self.cursor.fetchone()
-                if not result:
-                    messagebox.showerror("Erreur", f"Paramètre {param_name} introuvable.")
-                    return
-                min_val, max_val = result
-                if min_val is not None and value < min_val:
-                    messagebox.showwarning("Attention", f"Valeur inférieure au minimum ({min_val}) !")
-                # Mémoriser le paramètre
-                self.last_parameter[self.current_meter_id] = param_name
-
+            param_id = self.parameter_map.get(param_name)
+            if not param_id:
+                messagebox.showerror("Erreur", f"Paramètre {param_name} introuvable. Veuillez vérifier les paramètres du compteur.")
+                return
+            self.cursor.execute("SELECT target, max_value FROM parameters WHERE id=?", (param_id,))
+            result = self.cursor.fetchone()
+            if not result:
+                messagebox.showerror("Erreur", f"Paramètre {param_name} introuvable dans la base de données.")
+                return
+            min_val, max_val = result
+            if min_val is not None and value < min_val:
+                messagebox.showwarning("Attention", f"Valeur inférieure au minimum ({min_val}) !")
+            elif max_val is not None and value > max_val:
+                messagebox.showwarning("Attention", f"Valeur dépasse le maximum ({max_val}) !")
+            self.last_parameter[self.current_meter_id] = param_name
             if self.current_reading_id:
                 self.cursor.execute("UPDATE readings SET meter_id=?, parameter_id=?, date=?, value=?, note=?, attachment_path=? WHERE id=?",
                                    (self.current_meter_id, param_id, date, value, note, None, self.current_reading_id))
@@ -535,6 +473,7 @@ class MeterReadings:
                                    (self.current_meter_id, param_id, date, value, note, None))
             self.conn.commit()
             self.clear_form()
+            self.update_parameters()
             self.load_readings()
             self.load_files()
             messagebox.showinfo("Succès", "Relevé enregistré.")
@@ -544,25 +483,22 @@ class MeterReadings:
             messagebox.showerror("Erreur", f"Erreur : {e}")
 
     def load_readings(self):
-        self.filter_readings()  # Appeler filter_readings pour gérer la recherche et le filtrage par période
+        self.filter_readings()
 
     def load_selected_reading(self, event):
         selected_item = self.readings_tree.selection()
         if not selected_item:
-            self.files_listbox.delete(0, tk.END)  # Vider la liste des fichiers si aucun relevé n'est sélectionné
+            self.files_listbox.delete(0, tk.END)
             return
         reading_id = self.readings_tree.item(selected_item)["values"][0]
         self.current_reading_id = reading_id
         self.cursor.execute("SELECT meter_id, parameter_id, date, value, note, attachment_path FROM readings WHERE id=?", (reading_id,))
         meter_id, param_id, date, value, note, attachment_path = self.cursor.fetchone()
-
-        # Mettre à jour le formulaire
         self.cursor.execute("SELECT m.name, c.name FROM meters m JOIN categories c ON m.category_id = c.id WHERE m.id=?", (meter_id,))
         meter_name, category_name = self.cursor.fetchone()
         self.meter_var.set(f"{meter_name} ({category_name})")
         self.current_meter_id = meter_id
         self.update_parameters()
-
         if param_id:
             self.cursor.execute("SELECT name FROM parameters WHERE id=?", (param_id,))
             param_result = self.cursor.fetchone()
@@ -570,7 +506,6 @@ class MeterReadings:
                 self.parameter_var.set(param_result[0])
         else:
             self.parameter_var.set("")
-
         year, month, day = date.split("-")
         self.day_var.set(day)
         self.month_var.set(month)
@@ -578,11 +513,7 @@ class MeterReadings:
         self.value_var.set(str(value))
         self.note_var.set(note if note else "")
         self.show_targets()
-
-        # Verrouiller les champs après avoir rempli le formulaire
         self.lock_form()
-
-        # Charger les fichiers joints uniquement pour le relevé sélectionné
         self.load_files()
 
     def clear_form(self):
@@ -592,22 +523,15 @@ class MeterReadings:
         self.year_var.set(str(datetime.now().year))
         self.value_var.set("")
         self.note_var.set("")
-        self.min_label.config(text="-")
-        self.max_label.config(text="-")
-        self.unit_label.config(text="-")
-        self.parameter_var.set("")
-        if self.current_meter_id and self.current_meter_id in self.last_parameter:
-            self.parameter_var.set(self.last_parameter[self.current_meter_id])
+        # Ne pas réinitialiser self.parameter_var ici pour préserver le paramètre sélectionné
         self.load_readings()
-        self.files_listbox.delete(0, tk.END)  # Vider la liste des fichiers lors du vidage du formulaire
-        # Verrouiller les champs après avoir vidé le formulaire
+        self.files_listbox.delete(0, tk.END)
         self.lock_form()
 
     def edit_reading(self):
         if not self.current_reading_id:
             messagebox.showwarning("Erreur", "Sélectionnez un relevé à modifier.")
             return
-        # Déverrouiller les champs pour permettre la modification
         self.unlock_form()
 
     def delete_reading(self):
@@ -640,11 +564,9 @@ class MeterReadings:
         if not self.current_reading_id:
             messagebox.showwarning("Erreur", "Sélectionnez un relevé pour ajouter un fichier.")
             return
-
         file_path = filedialog.askopenfilename()
         if not file_path:
             return
-
         self.cursor.execute("SELECT name FROM meters WHERE id=?", (self.current_meter_id,))
         meter_name = self.cursor.fetchone()[0]
         year = self.year_var.get()
@@ -654,10 +576,7 @@ class MeterReadings:
         dest_file = os.path.join(dest_dir, os.path.basename(file_path))
         shutil.copy2(file_path, dest_file)
         attachment_path = os.path.join("fichiers", year, month, meter_name, os.path.basename(file_path))
-
-        # Mettre à jour l'enregistrement existant
-        self.cursor.execute("UPDATE readings SET attachment_path=? WHERE id=?",
-                           (attachment_path, self.current_reading_id))
+        self.cursor.execute("UPDATE readings SET attachment_path=? WHERE id=?", (attachment_path, self.current_reading_id))
         self.conn.commit()
         self.load_files()
 

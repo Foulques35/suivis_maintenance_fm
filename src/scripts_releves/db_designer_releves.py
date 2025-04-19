@@ -130,7 +130,7 @@ class DBDesigner:
         ttk.Label(frame, text="Nom :").pack(side="left")
         name_entry = ttk.Entry(frame)
         name_entry.pack(side="left", fill="x", expand=True, padx=5)
-        ttk.Label(frame, text="Cible :").pack(side="left")
+        ttk.Label(frame, text="Min :").pack(side="left")  # Renommé "Cible" en "Min"
         target_entry = ttk.Entry(frame, width=10)
         target_entry.pack(side="left", padx=5)
         ttk.Label(frame, text="Max :").pack(side="left")
@@ -262,7 +262,7 @@ class DBDesigner:
                     target = float(target) if target else None
                     max_val = float(max_val) if max_val else None
                 except ValueError:
-                    messagebox.showwarning("Erreur", "Cible et Max doivent être des nombres ou vides.")
+                    messagebox.showwarning("Erreur", "Min et Max doivent être des nombres ou vides.")  # Renommé "Cible" en "Min"
                     return
                 self.cursor.execute("INSERT INTO parameters (meter_id, name, target, max_value, unit) VALUES (?, ?, ?, ?, ?)",
                                    (meter_id, param_name, target, max_val, unit))
@@ -294,8 +294,8 @@ class DBDesigner:
                     break
         self.meter_category.set(category_name)
         self.clear_params()
-        self.cursor.execute("SELECT name, target, max_value, unit FROM parameters WHERE meter_id=?", (meter_id,))
-        for param_name, target, max_val, unit in self.cursor.fetchall():
+        self.cursor.execute("SELECT id, name, target, max_value, unit FROM parameters WHERE meter_id=?", (meter_id,))
+        for param_id, param_name, target, max_val, unit in self.cursor.fetchall():
             self.add_param_entry()
             frame, name_entry, target_entry, max_entry, unit_entry = self.param_entries[-1]
             name_entry.insert(0, param_name)
@@ -305,6 +305,7 @@ class DBDesigner:
                 max_entry.insert(0, str(max_val))
             if unit:
                 unit_entry.insert(0, unit)
+            frame.param_id = param_id
         self.create_meter_btn.config(text="Sauvegarder", command=lambda: self.save_meter_edit(meter_id))
 
     def save_meter_edit(self, meter_id):
@@ -315,9 +316,14 @@ class DBDesigner:
         if not name:
             messagebox.showwarning("Erreur", "Entrez un nom pour le compteur.")
             return
+
         self.cursor.execute("UPDATE meters SET name=?, note=?, category_id=? WHERE id=?", (name, note, category_id, meter_id))
-        self.cursor.execute("DELETE FROM parameters WHERE meter_id=?", (meter_id,))
-        for _, name_entry, target_entry, max_entry, unit_entry in self.param_entries:
+
+        existing_params = {param_id: param_name for param_id, param_name in self.cursor.execute("SELECT id, name FROM parameters WHERE meter_id=?", (meter_id,)).fetchall()}
+        existing_param_ids = set(existing_params.keys())
+
+        new_params = []
+        for frame, name_entry, target_entry, max_entry, unit_entry in self.param_entries:
             param_name = name_entry.get()
             target = target_entry.get()
             max_val = max_entry.get()
@@ -327,10 +333,31 @@ class DBDesigner:
                     target = float(target) if target else None
                     max_val = float(max_val) if max_val else None
                 except ValueError:
-                    messagebox.showwarning("Erreur", "Cible et Max doivent être des nombres ou vides.")
+                    messagebox.showwarning("Erreur", "Min et Max doivent être des nombres ou vides.")  # Renommé "Cible" en "Min"
                     return
+                param_id = getattr(frame, 'param_id', None)
+                new_params.append((param_id, param_name, target, max_val, unit))
+
+        new_param_ids = set()
+        for param_id, param_name, target, max_val, unit in new_params:
+            if param_id and param_id in existing_param_ids:
+                self.cursor.execute("UPDATE parameters SET name=?, target=?, max_value=?, unit=? WHERE id=?",
+                                   (param_name, target, max_val, unit, param_id))
+                new_param_ids.add(param_id)
+            else:
                 self.cursor.execute("INSERT INTO parameters (meter_id, name, target, max_value, unit) VALUES (?, ?, ?, ?, ?)",
                                    (meter_id, param_name, target, max_val, unit))
+                new_param_ids.add(self.cursor.lastrowid)
+
+        params_to_delete = existing_param_ids - new_param_ids
+        for param_id in params_to_delete:
+            self.cursor.execute("SELECT COUNT(*) FROM readings WHERE parameter_id=?", (param_id,))
+            count = self.cursor.fetchone()[0]
+            if count > 0:
+                messagebox.showwarning("Attention", f"Le paramètre '{existing_params[param_id]}' est utilisé dans {count} relevé(s) existant(s). Il sera conservé pour éviter de casser les relevés.")
+            else:
+                self.cursor.execute("DELETE FROM parameters WHERE id=?", (param_id,))
+
         self.conn.commit()
         self.clear_meter_form()
         self.create_meter_btn.config(text="Créer", command=self.add_meter)
