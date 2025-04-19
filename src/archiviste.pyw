@@ -3,7 +3,7 @@ import sys
 import importlib.util
 import sqlite3
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 from datetime import datetime
 import json
 import configparser
@@ -16,16 +16,15 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 def resource_path(relative_path):
     """Retourne le chemin absolu pour les fichiers inclus dans l'exécutable PyInstaller."""
     if hasattr(sys, '_MEIPASS'):
-        # Chemin temporaire où PyInstaller extrait les fichiers
         base_path = sys._MEIPASS
     else:
-        # Chemin normal lors de l'exécution du script Python
         base_path = os.path.abspath(os.path.dirname(__file__))
     return os.path.join(base_path, relative_path)
 
-# Chemin pour les fichiers de données (bases de données, sauvegardes, config.json)
-# Ces fichiers doivent être dans le répertoire de l'exécutable
+# Chemin pour les fichiers de données (bases de données, sauvegardes)
 DATA_DIR = os.path.abspath(os.path.dirname(sys.argv[0]))
+DB_DIR = os.path.join(DATA_DIR, "db")
+BACKUP_DIR = os.path.join(DATA_DIR, "db_backup")
 
 DEPENDENCIES = {
     "matplotlib": "matplotlib",
@@ -61,7 +60,7 @@ def check_dependencies():
 
 check_dependencies()
 
-# Imports mis à jour avec les nouveaux noms
+# Imports des modules existants
 from scripts_releves.db_designer_releves import DBDesigner as AuditDBDesigner
 from scripts_releves.meter_readings_releves import MeterReadings as AuditMeterReadings
 from scripts_releves.meter_reports_releves import MeterReports as AuditMeterReports
@@ -73,6 +72,10 @@ from scripts_compteurs.meter_reports_compteur import MeterReports as CompteursMe
 from scripts_compteurs.meter_graphs_compteur import MeterGraphs as CompteursMeterGraphs
 
 from scripts_releves.db_manager import DBManager
+
+# Imports des nouveaux modules pour tâches et bibliothèque
+from scripts_bibliotheque.archiviste_taches import TaskManager
+from scripts_bibliotheque.bibliotheque import LibraryManager
 
 def show_dependencies_ok_window():
     config_path = os.path.join(DATA_DIR, "config.ini")
@@ -108,27 +111,6 @@ def show_dependencies_ok_window():
     window.geometry(f"{width}x{height}+{x}+{y}")
     window.wait_window()
 
-def auto_backup_db(db_path, backup_dir_name="backup_db"):
-    backup_dir = os.path.join(DATA_DIR, backup_dir_name)
-    os.makedirs(backup_dir, exist_ok=True)
-    current_date = datetime.now()
-    backup_filename = f"{current_date.strftime('%Y-%m')}-{os.path.basename(db_path)}"
-    backup_path = os.path.join(backup_dir, backup_filename)
-    if not os.path.exists(backup_path):
-        try:
-            shutil.copy2(db_path, backup_path)
-            print(f"Sauvegarde effectuée : {backup_path}")
-        except Exception as e:
-            print(f"Erreur sauvegarde : {e}")
-    backups = sorted([f for f in os.listdir(backup_dir) if f.endswith(f"-{os.path.basename(db_path)}")])
-    if len(backups) > 12:
-        for old_backup in backups[:-12]:
-            try:
-                os.remove(os.path.join(backup_dir, old_backup))
-                print(f"Ancienne sauvegarde supprimée : {old_backup}")
-            except Exception as e:
-                print(f"Erreur suppression : {e}")
-
 class CustomNotebook:
     def __init__(self, parent):
         self.parent = parent
@@ -136,16 +118,13 @@ class CustomNotebook:
         self.frames = []
         self.current_tab = None
 
-        # Frame pour les onglets (boutons)
         self.tab_frame = tk.Frame(parent, bg="#D3D3D3")
         self.tab_frame.pack(fill="x")
 
-        # Frame pour le contenu des onglets
         self.content_frame = tk.Frame(parent)
         self.content_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
     def add(self, frame, text, bg_color, fg_color):
-        # Créer un bouton pour l'onglet
         btn = tk.Button(
             self.tab_frame,
             text=text,
@@ -159,11 +138,7 @@ class CustomNotebook:
         btn.pack(side="left", padx=2, pady=2)
         self.tabs.append(btn)
         self.frames.append(frame)
-
-        # Cacher le frame par défaut
         frame.pack_forget()
-
-        # Sélectionner le premier onglet par défaut
         if not self.current_tab:
             self.select_tab(frame)
 
@@ -172,8 +147,6 @@ class CustomNotebook:
             self.current_tab.pack_forget()
         self.current_tab = frame
         self.current_tab.pack(fill="both", expand=True)
-
-        # Mettre à jour l'apparence des boutons
         for btn, frm in zip(self.tabs, self.frames):
             if frm == frame:
                 btn.config(relief="sunken")
@@ -186,41 +159,14 @@ class ArchivisteApp:
         self.root.title("Archiviste")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
-        # Charger ou définir l’emplacement des dossiers db
-        self.config_file = os.path.join(DATA_DIR, "config.json")
-        self.db_dir_audit = self.load_db_dir("audit")
-        self.db_dir_compteurs = self.load_db_dir("compteurs")
+        # Créer le dossier db si nécessaire
+        os.makedirs(DB_DIR, exist_ok=True)
 
-        # Demander à l'utilisateur de sélectionner ou confirmer l’emplacement des dossiers db
-        self.db_dir_audit = self.select_db_dir("Audit", self.db_dir_audit)
-        if not self.db_dir_audit:
-            messagebox.showerror("Erreur", "Aucun dossier de base de données pour Audit sélectionné. L'application va se fermer.")
-            self.root.destroy()
-            return
-        os.makedirs(self.db_dir_audit, exist_ok=True)
-        self.save_db_dir("audit", self.db_dir_audit)
-
-        self.db_dir_compteurs = self.select_db_dir("Compteurs", self.db_dir_compteurs)
-        if not self.db_dir_compteurs:
-            messagebox.showerror("Erreur", "Aucun dossier de base de données pour Compteurs sélectionné. L'application va se fermer.")
-            self.root.destroy()
-            return
-        os.makedirs(self.db_dir_compteurs, exist_ok=True)
-        self.save_db_dir("compteurs", self.db_dir_compteurs)
-
-        # Demander à l'utilisateur de sélectionner une base de données pour Audit
-        self.db_path_audit = self.select_db("Audit", self.db_dir_audit, "audit.db")
-        if not self.db_path_audit:
-            messagebox.showerror("Erreur", "Aucune base de données pour Audit sélectionnée. L'application va se fermer.")
-            self.root.destroy()
-            return
-
-        # Demander à l'utilisateur de sélectionner une base de données pour Compteurs
-        self.db_path_compteurs = self.select_db("Compteurs", self.db_dir_compteurs, "meters.db")
-        if not self.db_path_compteurs:
-            messagebox.showerror("Erreur", "Aucune base de données pour Compteurs sélectionnée. L'application va se fermer.")
-            self.root.destroy()
-            return
+        # Chemins fixes pour les bases de données
+        self.db_path_audit = os.path.join(DB_DIR, "audit.db")
+        self.db_path_compteurs = os.path.join(DB_DIR, "meters.db")
+        self.db_path_tasks = os.path.join(DB_DIR, "tasks.db")
+        self.db_path_library = os.path.join(DB_DIR, "library.db")
 
         # Initialisation des connexions
         self.conn_audit = sqlite3.connect(self.db_path_audit, check_same_thread=False)
@@ -233,138 +179,100 @@ class ArchivisteApp:
         self.create_tables_compteurs(self.conn_compteurs.cursor())
         self.conn_compteurs.commit()
 
-        # Sauvegarde automatique des bases
-        auto_backup_db(self.db_path_audit, "backup_db_audit")
-        auto_backup_db(self.db_path_compteurs, "backup_db_compteurs")
+        self.conn_tasks = sqlite3.connect(self.db_path_tasks, check_same_thread=False)
+        self.conn_tasks.isolation_level = None
+        self.create_tables_tasks(self.conn_tasks.cursor())
+        self.conn_tasks.commit()
+
+        self.conn_library = sqlite3.connect(self.db_path_library, check_same_thread=False)
+        self.conn_library.isolation_level = None
+        self.create_tables_library(self.conn_library.cursor())
+        self.conn_library.commit()
 
         # Créer le Notebook personnalisé
         self.notebook = CustomNotebook(self.root)
 
-        # Création des onglets dans l'ordre demandé
-        # 1. Relevés techniques (Audit) - Bleu clair
-        self.tab2_audit = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab2_audit, text="Relevés techniques", bg_color="#ADD8E6", fg_color="black")
+        # Création des onglets dans l'ordre : Tâches, Bibliothèque, Sauvegardes, Audit, Compteurs
+        # Tâches
+        self.tab_tasks = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab_tasks, text="Tâches", bg_color="#98FB98", fg_color="black")
         
-        # 2. Compteurs (Compteurs) - Jaune clair
-        self.tab2_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab2_compteurs, text="Compteurs", bg_color="#FFFFE0", fg_color="black")
+        # Bibliothèque
+        self.tab_library = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab_library, text="Bibliothèque", bg_color="#FFB6C1", fg_color="black")
         
-        # 3. Synthèse relevés (Audit) - Bleu clair
-        self.tab3_audit = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab3_audit, text="Synthèse relevés", bg_color="#ADD8E6", fg_color="black")
-        
-        # 4. Graphique relevés (Audit) - Bleu clair
-        self.tab4_audit = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab4_audit, text="Graphique relevés", bg_color="#ADD8E6", fg_color="black")
-        
-        # 5. Synthèse compteurs (Compteurs) - Jaune clair
-        self.tab3_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab3_compteurs, text="Synthèse compteurs", bg_color="#FFFFE0", fg_color="black")
-        
-        # 6. Graphique compteurs (Compteurs) - Jaune clair
-        self.tab4_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab4_compteurs, text="Graphique compteurs", bg_color="#FFFFE0", fg_color="black")
-        
-        # 7. Gestion relevés (Audit) - Bleu foncé, texte blanc
-        self.tab1_audit = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab1_audit, text="Gestion relevés", bg_color="#4682B4", fg_color="white")
-        
-        # 8. Gestion compteurs (Compteurs) - Jaune foncé
-        self.tab1_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab1_compteurs, text="Gestion compteurs", bg_color="#FFD700", fg_color="black")
-        
-        # 9. Sauvegardes - Noir, texte blanc
+        # Sauvegardes
         self.tab_db_manager = tk.Frame(self.notebook.content_frame)
         self.notebook.add(self.tab_db_manager, text="Sauvegardes", bg_color="#000000", fg_color="white")
 
-        # Initialisation des modules pour Audit
+        # Audit
+        self.tab2_audit = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab2_audit, text="Relevés techniques", bg_color="#ADD8E6", fg_color="black")
+        
+        self.tab3_audit = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab3_audit, text="Synthèse relevés", bg_color="#ADD8E6", fg_color="black")
+        
+        self.tab4_audit = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab4_audit, text="Graphique relevés", bg_color="#ADD8E6", fg_color="black")
+        
+        self.tab1_audit = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab1_audit, text="Gestion relevés", bg_color="#4682B4", fg_color="white")
+        
+        # Compteurs
+        self.tab2_compteurs = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab2_compteurs, text="Compteurs", bg_color="#FFFFE0", fg_color="black")
+        
+        self.tab3_compteurs = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab3_compteurs, text="Synthèse compteurs", bg_color="#FFFFE0", fg_color="black")
+        
+        self.tab4_compteurs = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab4_compteurs, text="Graphique compteurs", bg_color="#FFFFE0", fg_color="black")
+        
+        self.tab1_compteurs = tk.Frame(self.notebook.content_frame)
+        self.notebook.add(self.tab1_compteurs, text="Gestion compteurs", bg_color="#FFD700", fg_color="black")
+
+        # Initialisation des modules
+        # Audit
         self.db_designer_audit = AuditDBDesigner(self.tab1_audit, self.conn_audit)
+        print("Instantiating AuditMeterReadings...")
         self.meter_readings_audit = AuditMeterReadings(self.tab2_audit, self.conn_audit)
+        print("AuditMeterReadings instantiated successfully.")
         self.meter_graphs_audit = AuditMeterGraphs(self.tab4_audit)
         self.meter_reports_audit = AuditMeterReports(self.tab3_audit, self.conn_audit, self.meter_graphs_audit)
 
-        # Initialisation des modules pour Compteurs
+        # Compteurs
         self.db_designer_compteurs = CompteursDBDesigner(self.tab1_compteurs, self.conn_compteurs)
+        print("Instantiating CompteursMeterReadings...")
+        import scripts_compteurs.meter_readings_compteur
+        print(f"Using meter_readings_compteur.py from: {scripts_compteurs.meter_readings_compteur.__file__}")
         self.meter_readings_compteurs = CompteursMeterReadings(self.tab2_compteurs, self.conn_compteurs)
+        print("CompteursMeterReadings instantiated successfully.")
         self.meter_graphs_compteurs = CompteursMeterGraphs(self.tab4_compteurs)
         self.meter_reports_compteurs = CompteursMeterReports(self.tab3_compteurs, self.conn_compteurs, self.meter_graphs_compteurs)
 
-        # Initialisation du gestionnaire de bases de données
-        self.db_manager = DBManager(self.tab_db_manager, self.conn_audit, self.db_path_audit, self.conn_compteurs, self.db_path_compteurs, self.update_connection_after_import)
+        # Bibliothèque
+        self.library_manager = LibraryManager(self.tab_library, self.conn_library)
 
-        # Mettre à jour les connexions pour les modules
-        self.update_connection_after_import(self.conn_audit, self.conn_compteurs)
+        # Tâches
+        self.task_manager = TaskManager(self.tab_tasks, self.conn_tasks, self.conn_library, self.library_manager)
 
-        # Charger les listes déroulantes après l'initialisation
+        # Gestionnaire de bases de données
+        self.db_manager = DBManager(
+            self.tab_db_manager,
+            self.conn_audit, self.db_path_audit,
+            self.conn_compteurs, self.db_path_compteurs,
+            self.conn_tasks, self.db_path_tasks,
+            self.conn_library, self.db_path_library,
+            self.update_connection_after_import
+        )
+
+        # Mettre à jour les connexions
+        self.update_connection_after_import(self.conn_audit, self.conn_compteurs, self.conn_tasks, self.conn_library)
+
+        # Charger les listes déroulantes
         self.meter_graphs_audit.update_meters_to_combobox()
 
-    def load_db_dir(self, section):
-        """Charge l’emplacement du dossier db depuis le fichier de configuration."""
-        default_dir = os.path.join(DATA_DIR, f"db-{section}")
-        if not os.path.exists(self.config_file):
-            return default_dir
-        try:
-            with open(self.config_file, "r") as f:
-                config = json.load(f)
-            return config.get(f"db_dir_{section}", default_dir)
-        except Exception as e:
-            print(f"Erreur lors du chargement de la configuration pour {section} : {e}")
-            return default_dir
-
-    def save_db_dir(self, section, db_dir):
-        """Sauvegarde l’emplacement du dossier db dans le fichier de configuration."""
-        try:
-            if os.path.exists(self.config_file):
-                with open(self.config_file, "r") as f:
-                    config = json.load(f)
-            else:
-                config = {}
-            config[f"db_dir_{section}"] = db_dir
-            with open(self.config_file, "w") as f:
-                json.dump(config, f, indent=4)
-        except Exception as e:
-            print(f"Erreur lors de la sauvegarde de la configuration pour {section} : {e}")
-
-    def select_db_dir(self, section, default_dir):
-        """Demande à l'utilisateur de sélectionner ou confirmer l’emplacement du dossier db."""
-        if messagebox.askyesno(f"Emplacement des bases de données ({section})", f"Voulez-vous utiliser cet emplacement pour les bases de données ({section}) ?\n{default_dir}\n\n(Si non, vous pourrez choisir un autre dossier)"):
-            return default_dir
-        return filedialog.askdirectory(
-            title=f"Sélectionner l’emplacement des bases de données ({section})",
-            initialdir=default_dir
-        )
-
-    def select_db(self, section, db_dir, default_db_name):
-        """Demande à l'utilisateur de sélectionner une base de données, ou en crée une vierge si nécessaire."""
-        db_files = [f for f in os.listdir(db_dir) if f.endswith(".db")]
-        
-        if not db_files:
-            if messagebox.askyesno(
-                f"Aucune base de données trouvée ({section})",
-                f"Aucun fichier .db n’a été trouvé dans le dossier {db_dir}.\nVoulez-vous créer une nouvelle base vierge ({default_db_name}) ?"
-            ):
-                default_db_path = os.path.join(db_dir, default_db_name)
-                temp_conn = sqlite3.connect(default_db_path)
-                temp_cursor = temp_conn.cursor()
-                if section == "Audit":
-                    self.create_tables_audit(temp_cursor)
-                else:
-                    self.create_tables_compteurs(temp_cursor)
-                temp_conn.commit()
-                temp_conn.close()
-                return default_db_path
-            else:
-                messagebox.showinfo("Information", "Veuillez sélectionner une base de données existante ou choisir un autre dossier.")
-        
-        file_path = filedialog.askopenfilename(
-            filetypes=[("SQLite Database", "*.db")],
-            title=f"Sélectionner une base de données ({section})",
-            initialdir=db_dir
-        )
-        return file_path
-
     def create_tables_audit(self, cursor):
-        """Crée les tables nécessaires pour Audit si elles n'existent pas."""
         cursor.execute('''CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -388,7 +296,7 @@ class ArchivisteApp:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             meter_id INTEGER,
             name TEXT NOT NULL,
-            target REAL,
+            cible REAL,
             max_value REAL,
             unit TEXT,
             FOREIGN KEY (meter_id) REFERENCES meters(id)
@@ -406,7 +314,6 @@ class ArchivisteApp:
         )''')
 
     def create_tables_compteurs(self, cursor):
-        """Crée les tables nécessaires pour Compteurs si elles n'existent pas."""
         cursor.execute('''CREATE TABLE IF NOT EXISTS categories (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -445,9 +352,53 @@ class ArchivisteApp:
         except:
             pass
 
-    def update_connection_after_import(self, conn_audit, conn_compteurs):
+    def create_tables_tasks(self, cursor):
+        cursor.execute('''CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            description TEXT,
+            due_date TEXT,
+            priority TEXT DEFAULT 'Moyenne',
+            status TEXT DEFAULT 'En cours',
+            recurrence TEXT DEFAULT 'Aucune'
+        )''')
+
+    def create_tables_library(self, cursor):
+        cursor.execute('''CREATE TABLE IF NOT EXISTS library (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            year TEXT,
+            category TEXT,
+            project TEXT,
+            site TEXT,
+            nomenclature TEXT,
+            emetteur TEXT,
+            objet TEXT,
+            version TEXT,
+            file_path TEXT
+        )''')
+        # Ajouter la table de liaison task_file_link
+        cursor.execute('''CREATE TABLE IF NOT EXISTS task_file_link (
+            task_id INTEGER,
+            file_id INTEGER,
+            FOREIGN KEY (task_id) REFERENCES tasks(id),
+            FOREIGN KEY (file_id) REFERENCES library(id),
+            PRIMARY KEY (task_id, file_id)
+        )''')
+        # Ajouter la table de liaison reading_file_link
+        cursor.execute('''CREATE TABLE IF NOT EXISTS reading_file_link (
+            reading_id INTEGER,
+            file_id INTEGER,
+            FOREIGN KEY (reading_id) REFERENCES readings(id),
+            FOREIGN KEY (file_id) REFERENCES library(id),
+            PRIMARY KEY (reading_id, file_id)
+        )''')
+
+    def update_connection_after_import(self, conn_audit, conn_compteurs, conn_tasks, conn_library):
         self.conn_audit = conn_audit
         self.conn_compteurs = conn_compteurs
+        self.conn_tasks = conn_tasks
+        self.conn_library = conn_library
         # Mise à jour des modules Audit
         self.db_designer_audit.conn = self.conn_audit
         self.db_designer_audit.cursor = self.conn_audit.cursor()
@@ -470,15 +421,32 @@ class ArchivisteApp:
         self.meter_reports_compteurs.cursor = self.conn_compteurs.cursor()
         self.meter_graphs_compteurs.conn = self.conn_compteurs
         self.meter_graphs_compteurs.cursor = self.conn_compteurs.cursor()
+        # Mise à jour des modules Tâches
+        self.task_manager.conn = self.conn_tasks
+        self.task_manager.conn_library = self.conn_library
+        self.task_manager.cursor = self.conn_tasks.cursor()
+        self.task_manager.cursor_library = self.conn_library.cursor()
+        self.task_manager.refresh_task_list()
+        # Mise à jour des modules Bibliothèque
+        self.library_manager.conn = self.conn_library
+        self.library_manager.cursor = self.conn_library.cursor()
+        self.library_manager.refresh_folder_list()
 
     def on_closing(self):
-        if hasattr(self, 'conn_audit'):
-            self.conn_audit.close()
-            print("Connexion SQLite (Audit) fermée.")
-        if hasattr(self, 'conn_compteurs'):
-            self.conn_compteurs.close()
-            print("Connexion SQLite (Compteurs) fermée.")
-        self.root.destroy()
+        if messagebox.askyesno("Quitter", "Voulez-vous vraiment quitter ?"):
+            if hasattr(self, 'conn_audit'):
+                self.conn_audit.close()
+                print("Connexion SQLite (Audit) fermée.")
+            if hasattr(self, 'conn_compteurs'):
+                self.conn_compteurs.close()
+                print("Connexion SQLite (Compteurs) fermée.")
+            if hasattr(self, 'conn_tasks'):
+                self.conn_tasks.close()
+                print("Connexion SQLite (Tâches) fermée.")
+            if hasattr(self, 'conn_library'):
+                self.conn_library.close()
+                print("Connexion SQLite (Bibliothèque) fermée.")
+            self.root.destroy()
 
 if __name__ == "__main__":
     root = tk.Tk()

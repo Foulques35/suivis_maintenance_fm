@@ -1,0 +1,5 @@
+{
+    "tasks_exclude_saturday": true,
+    "tasks_exclude_sunday": true,
+    "tasks_status_filter": "Tous"
+}

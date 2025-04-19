@@ -52,7 +52,7 @@ class MeterReports:
         ttk.Button(filters_frame, text="Exporter CSV", command=self.export_to_csv).grid(row=2, column=5, padx=5, pady=5)
 
         # Tableau
-        self.tree = ttk.Treeview(self.main_frame, columns=("ID", "Date", "Category", "Meter", "Parameter", "Value", "Unit", "Target", "Max", "Difference", "Status", "Note"), show="headings")
+        self.tree = ttk.Treeview(self.main_frame, columns=("ID", "Date", "Category", "Meter", "Parameter", "Value", "Unit", "Min", "Max", "Difference", "Status", "Note"), show="headings")
         self.tree.heading("ID", text="ID", command=lambda: self.sort_column("ID", False))
         self.tree.heading("Date", text="Date", command=lambda: self.sort_column("Date", False))
         self.tree.heading("Category", text="Catégorie", command=lambda: self.sort_column("Category", False))
@@ -60,7 +60,7 @@ class MeterReports:
         self.tree.heading("Parameter", text="Paramètre", command=lambda: self.sort_column("Parameter", False))
         self.tree.heading("Value", text="Valeur", command=lambda: self.sort_column("Value", False))
         self.tree.heading("Unit", text="Unité", command=lambda: self.sort_column("Unit", False))
-        self.tree.heading("Target", text="Cible", command=lambda: self.sort_column("Target", False))
+        self.tree.heading("Min", text="Min.", command=lambda: self.sort_column("Min", False))
         self.tree.heading("Max", text="Max", command=lambda: self.sort_column("Max", False))
         self.tree.heading("Difference", text="Écart", command=lambda: self.sort_column("Difference", False))
         self.tree.heading("Status", text="Statut", command=lambda: self.sort_column("Status", False))
@@ -72,7 +72,7 @@ class MeterReports:
         self.tree.column("Parameter", width=100, anchor="center")
         self.tree.column("Value", width=80, anchor="center")
         self.tree.column("Unit", width=60, anchor="center")
-        self.tree.column("Target", width=80, anchor="center")
+        self.tree.column("Min", width=80, anchor="center")
         self.tree.column("Max", width=80, anchor="center")
         self.tree.column("Difference", width=80, anchor="center")
         self.tree.column("Status", width=80, anchor="center")
@@ -146,7 +146,7 @@ class MeterReports:
 
         filtered_readings = []
         for reading in readings:
-            reading_id, date, meter_id, meter_name, category_id, param_name, value, unit, target, max_val, note = reading
+            reading_id, date, meter_id, meter_name, category_id, param_name, value, unit, min_val, max_val, note = reading
             category_name = self.get_category_name(category_id)
 
             # Filtrer par catégorie
@@ -155,36 +155,32 @@ class MeterReports:
 
             note = note or ""
             unit = unit or "-"
-            target = str(target) if target is not None else "-"
+            min_val = str(min_val) if min_val is not None else "-"
             max_val = str(max_val) if max_val is not None else "-"
 
             # Calcul de l'écart et statut
             difference = "-"
             status = "OK"
             tags = ("ok",)
-            if max_val != "-" and value > float(max_val):
+            if min_val != "-" and value < float(min_val):
+                difference = str(round(value - float(min_val), 2))
+                status = "Inférieur"
+                tags = ("below",)
+            elif max_val != "-" and value > float(max_val):
                 difference = str(round(value - float(max_val), 2))
                 status = "Dépassement"
                 tags = ("exceed",)
-            elif target != "-" and value > float(target):
-                difference = str(round(value - float(target), 2))
-                status = "Dépassement"
-                tags = ("exceed",)
-            elif target != "-" and value < float(target):
-                difference = str(round(value - float(target), 2))
-                status = "Inférieur"
-                tags = ("below",)
 
             filtered_readings.append((
                 reading_id, date, category_name, meter_name, param_name, value,
-                unit, target, max_val, difference, status, note, tags
+                unit, min_val, max_val, difference, status, note, tags
             ))
 
         for reading in filtered_readings:
-            reading_id, date, category_name, meter_name, param_name, value, unit, target, max_val, difference, status, note, tags = reading
+            reading_id, date, category_name, meter_name, param_name, value, unit, min_val, max_val, difference, status, note, tags = reading
             self.tree.insert("", tk.END, values=(
                 reading_id, date, category_name, meter_name, param_name, value,
-                unit, target, max_val, difference, status, note
+                unit, min_val, max_val, difference, status, note
             ), tags=tags)
 
     def sort_column(self, col, reverse):
@@ -193,7 +189,7 @@ class MeterReports:
         
         # Gérer les valeurs numériques
         try:
-            if col in ("Value", "Target", "Max", "Difference"):
+            if col in ("Value", "Min", "Max", "Difference"):
                 data = [(float(val) if val != "-" else float("-inf"), item) for val, item in data]
             else:
                 data = [(val.lower() if isinstance(val, str) else val, item) for val, item in data]
