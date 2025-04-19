@@ -1,28 +1,90 @@
-## Projet Archiviste
+# Archiviste 📚
 
-Le code est généré avec l'assistance d'une IA (Grok3) et utilise python 3.
+![Linux](https://img.shields.io/badge/Linux-Fedora_41-blue)
+![Windows](https://img.shields.io/badge/Windows-10%2F11-blue)
+![Version](https://img.shields.io/badge/Version-1.0.0-green)
 
-Projet personnel pour la gestion de données et l'archivage de documents. \
-Créer principalement pour le suivis des activités de maintenance d'un ou plusieurs bâtiments en local ou sur un cloud.
+**Archiviste** est une application intuitive et multi-plateforme conçue pour gérer efficacement des relevés techniques, des compteurs, des tâches, et une bibliothèque de fichiers. Développée avec Python et une interface graphique (Tkinter), elle offre une solution complète pour organiser vos données et documents, que vous soyez sur Linux ou Windows.
 
-### Les dépendances peuvent être installée avec le script :
-Installation_dependances.py
+## Aperçu
 
-## Lancement des applications :
-Lancer Projet-Archiviste.py
+Archiviste regroupe quatre modules principaux pour répondre à vos besoins d’organisation et de gestion :
 
-Chaque application peut être lancée indépendamment les unes des autres en lancçant leurs scripts.
+- **Relevés** : Suivez et analysez vos relevés techniques avec des graphiques interactifs.
+- **Compteurs** : Gérez vos compteurs (électricité, eau, etc.) avec des rapports détaillés.
+- **Tâches** : Planifiez vos activités avec un agenda et liez des documents associés.
+- **Bibliothèque** : Organisez vos fichiers dans une arborescence personnalisée.
 
-**Archivision** : application permettant de générer des rapports via des images (en cours).
-**Archiviste** : renommer des fichiers selon une nomenclature
-**Mails** : Pour archiver et visualiser des emails (format outlook, .eml)
-**Notebook** : suivis des commandes et des devis avec gestion des pièces jointes.
-**Registre-V2** : Main courante pour la maintenance avec gestion de pièces jointes et vue planning en kanban.
-**Stock** : gestion d'un stock avec pièces jointe de facon très simple avec peu de fonctionnalités.
-**Zip_extractor** : dézipper des fichiers zip en masse.
-**Suivis de compteur (en test)** permet de designer une base de donnée pour le suivi de compteurs électriques et/ou d'eau. DB_designer permet de créer sa base de donnée, Releves_compteurs permet d'enregistrer ses index (configuration permet d'enregistrer l'index de départ). Rapports-compteur permet d'avoir une visualisation de ses relevés par intervales en comparant les valeurs des compteurs dans le temps, en page 2 une vue graphique permet de faire la synthèse.
+Que vous soyez un technicien, un gestionnaire de projet ou un particulier, Archiviste simplifie la gestion de vos données et documents avec une interface claire et accessible.
 
-----
-Python : https://www.python.org/downloads/
-IDE : Thonny - https://thonny.org/
-Discord : https://discord.gg/MFk2kUhD
+## Fonctionnalités principales
+
+### 📊 Gestion des relevés et compteurs
+- Saisie et suivi des relevés techniques et des compteurs.
+- Génération de graphiques (via Matplotlib) pour visualiser les tendances.
+- Exportation des données sous format CSV pour une analyse externe.
+
+### 📅 Gestion des tâches avec agenda
+- Création et gestion de tâches avec prise en charge de la récurrence (quotidienne, hebdomadaire, mensuelle, etc.).
+- Vue agenda intégrée pour planifier vos échéances.
+- Possibilité de lier des fichiers à vos tâches pour une meilleure organisation.
+
+### 🗂️ Bibliothèque de fichiers
+- Organisation des fichiers dans une arborescence (année/catégorie/projet).
+- Options de nommage personnalisées (avec nomenclature) ou conservation des noms d’origine.
+- Gestion des sites et nomenclatures via les fichiers `sites.json` et `nomenclatures.json`.
+
+### ⚙️ Compatibilité et personnalisation
+- Compatible avec **Linux** (testé sur Fedora 41) et **Windows** (10/11).
+- Interface graphique légère et intuitive (Tkinter).
+- Personnalisation via des fichiers de configuration (`sites.json`& `nomenclatures.json`).
+
+## Installation
+
+### Prérequis
+- **Linux** :
+  - Dépendances système :
+    ```
+    sudo dnf install libX11 freetype libpng  # Fedora
+    sudo apt-get install libx11-6 libfreetype6 libpng16-16  # Ubuntu
+    ```
+- **Windows** :
+  - Placer l'éxécutable dans le dossier ou vous souhaitez avoir l'application et lancez la.
+
+### Téléchargement et exécution
+1. Téléchargez la dernière release depuis l’onglet [Releases](https://github.com/Foulques35/suivis_maintenance_fm/releases).
+   - Pour Linux : `Archiviste_Linux`
+   - Pour Windows : `Archiviste_Windows.exe`
+2. Placez l’application dans un dossier où vous avez les permissions d’écriture.
+3. Lancez l’application :
+   - **Linux** :
+     ```
+     ./Archiviste
+     ```
+   - **Windows** :
+     - Double-cliquez sur `Archiviste.exe`.
+     - Si une alerte SmartScreen ("Éditeur inconnu") apparaît, cliquez sur "Plus d’infos" > "Exécuter quand même".
+
+### Note sur les alertes antivirus (Windows)
+Sous Windows, Microsoft Defender peut signaler `Archiviste.exe` comme un malware (faux positif dû à PyInstaller). Pour l’autoriser :
+1. Dans **Sécurité Windows**, allez dans "Protection contre les virus et menaces".
+2. Sous l’alerte, cliquez sur "Actions" > "Autoriser".
+3. Si nécessaire, ajoutez une exclusion dans "Paramètres de protection contre les virus et menaces" > "Exclusions".
+
+Une signature numérique sera ajoutée dans une prochaine version pour éliminer ces alertes.
+
+## Configuration
+- **Sites et nomenclatures** : Éditez les fichiers `sites.json` et `nomenclatures.json` (situés à la racine de l’application) pour personnaliser les options de la Bibliothèque.
+- **Préférences** : Le fichier `config.ini` permet de sauvegarder certaines préférences (par exemple, masquer les messages de dépendances).
+
+## Développement
+- Développé sous **Linux - Fedora 41**.
+- Construit avec **Python** (Tkinter, Matplotlib, Tkcalendar).
+- Testé sur Linux (Fedora 41) et Windows (10/11). Des différences mineures dans les couleurs de l’interface peuvent apparaître selon le système.
+
+## Remerciements
+Merci d’essayer Archiviste ! Ce projet tente de simplifier votre gestion quotidienne. 🚀
+- Python : https://www.python.org/downloads/ 
+- IDE : Thonny - https://thonny.org/ 
+- Discord : https://discord.gg/MFk2kUhD
+
