@@ -1,6 +1,29 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, font
 
+class Tooltip:
+    def __init__(self, canvas, item_id, text):
+        self.canvas = canvas
+        self.item_id = item_id
+        self.text = text
+        self.tooltip = None
+        self.canvas.tag_bind(item_id, "<Enter>", self.show_tooltip)
+        self.canvas.tag_bind(item_id, "<Leave>", self.hide_tooltip)
+
+    def show_tooltip(self, event):
+        if self.item_id not in self.canvas.find_all():
+            return
+        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        x += 20
+        y += 20
+        self.tooltip = self.canvas.create_text(x, y, text=self.text, font=("Arial", 8), anchor="nw", tags="tooltip", fill="black")
+        self.canvas.tag_raise(self.tooltip)
+
+    def hide_tooltip(self, event):
+        if self.tooltip:
+            self.canvas.delete(self.tooltip)
+            self.tooltip = None
+
 class DBDesigner:
     def __init__(self, parent, conn):
         self.parent = parent
@@ -95,7 +118,21 @@ class DBDesigner:
         self.tree.column("Note", width=100)
         self.tree.pack(fill="both", expand=True)
         self.tree.bind("<<TreeviewSelect>>", self.on_tree_select)
-        self.canvas.bind("<ButtonPress-1>", self.select_item)
+
+        # Variables pour l'arborescence interactive
+        self.node_positions = {}
+        self.meter_sizes = {}
+        self.expanded_nodes = set()  # Suivre les nœuds dépliés
+        self.dragging_node = None
+        self.dragging_start = None
+        self.level_positions = {}  # Suivre les positions Y par niveau pour l'alignement
+        self.node_heights = {}  # Suivre les hauteurs des sous-arbres
+
+        # Bindings pour interactions
+        self.canvas.bind("<Button-1>", self.on_node_click)
+        self.canvas.bind("<Double-1>", self.on_node_double_click)  # Double-clic pour déplier/replier
+        self.canvas.bind("<B1-Motion>", self.on_node_drag)
+        self.canvas.bind("<ButtonRelease-1>", self.on_node_release)
         self.canvas.bind("<MouseWheel>", self.scroll_canvas)
         self.canvas.bind("<Button-4>", self.scroll_canvas)
         self.canvas.bind("<Button-5>", self.scroll_canvas)
@@ -175,94 +212,256 @@ class DBDesigner:
         for cat in self.cursor.fetchall():
             self.tree.insert("", tk.END, values=(f"cat_{cat[0]}", cat[1], ""))
 
-        # Canvas
+        # Canvas - Arborescence interactive
         self.canvas.delete("all")
-        self.cat_positions = {}
-        self.meter_positions = {}
+        self.node_positions = {}
+        self.meter_sizes = {}
+        self.level_positions = {0: 20}  # Initialiser les positions Y par niveau
+        self.node_heights = {}  # Réinitialiser les hauteurs des sous-arbres
         x_pos = 20
-        y_pos = 20
-        text_font = font.Font(family="Arial", size=10, weight="bold")
+        text_font = font.Font(family="Arial", size=12, weight="bold")
         meter_font = font.Font(family="Arial", size=10)
 
-        # Calculer les tailles des rectangles pour les compteurs
-        self.meter_sizes = {}
+        # Calculer les tailles des compteurs
         self.cursor.execute("SELECT id, name, category_id FROM meters ORDER BY name")
         meters = self.cursor.fetchall()
         for meter_id, name, category_id in meters:
-            text_width = meter_font.measure(name) + 20  # Padding
+            text_width = meter_font.measure(name) + 20
             text_height = meter_font.metrics("linespace") + 10
             self.meter_sizes[meter_id] = (max(130, text_width), max(30, text_height))
 
-        # Positionner les catégories principales verticalement
-        self.cursor.execute("SELECT id, name FROM categories WHERE parent_id IS NULL")
+        # Calculer les hauteurs des sous-arbres
+        self.cursor.execute("SELECT id FROM categories WHERE parent_id IS NULL")
         top_categories = self.cursor.fetchall()
-        top_cat_ids = [cat[0] for cat in top_categories]
+        for cat_id, in top_categories:
+            self.calculate_subtree_height(cat_id)
 
-        for cat_id, name in top_categories:
-            text_width = text_font.measure(name) + 20
-            width = max(200, text_width)
-            height = 50  # Hauteur initiale
-            self.cat_positions[cat_id] = (x_pos, y_pos, x_pos + width, y_pos + height, width, height)
-            self.cursor.execute("UPDATE categories SET x_pos=?, y_pos=? WHERE id=?", (x_pos, y_pos, cat_id))
-            y_pos = self.calculate_category_height(cat_id, x_pos, y_pos)
+        # Dessiner l'arborescence
+        for cat_id, in top_categories:
+            self.draw_category_tree(cat_id, x_pos, 0)
 
-        # Dessiner les catégories
-        self.cursor.execute("SELECT id, name, x_pos, y_pos, width, height, parent_id FROM categories")
-        categories = self.cursor.fetchall()
-        for cat_id, name, x_pos, y_pos, width, height, parent_id in categories:
-            level = 0
-            current_parent = parent_id
-            while current_parent:
-                self.cursor.execute("SELECT parent_id FROM categories WHERE id=?", (current_parent,))
-                current_parent = self.cursor.fetchone()[0]
-                level += 1
-            fill_color = "#D3D3D3" if parent_id is None else ["#ADD8E6", "#FFB6C1", "#98FB98", "#FFDAB9", "#E6E6FA"][min(level-1, 4)]
-            self.canvas.create_rectangle(x_pos, y_pos, x_pos + width, y_pos + height, fill=fill_color, tags=f"cat_{cat_id}")
-            self.canvas.create_text(x_pos + width/2, y_pos + 15, text=name, font=("Arial", 10, "bold"), tags=f"cat_{cat_id}_text")
-
-        # Dessiner les compteurs
-        for meter_id, name, category_id in meters:
-            if meter_id in self.meter_positions:
-                x_pos, y_pos = self.meter_positions[meter_id]
-                width, height = self.meter_sizes[meter_id]
-                self.canvas.create_rectangle(x_pos, y_pos, x_pos + width, y_pos + height, fill="#FFC107", tags=f"meter_{meter_id}")
-                self.canvas.create_text(x_pos + width/2, y_pos + height/2, text=name, font=("Arial", 10), tags=f"meter_{meter_id}_text")
+        # Dessiner les nœuds et connexions
+        self.draw_nodes()
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 1000, 1000))
 
-    def calculate_category_height(self, cat_id, x_base, y_base):
-        text_font = font.Font(family="Arial", size=10, weight="bold")
-        if cat_id not in self.cat_positions:
-            return y_base
+    def calculate_subtree_height(self, cat_id):
+        text_font = font.Font(family="Arial", size=12, weight="bold")
+        # Calculer la hauteur du nœud de la catégorie
+        self.cursor.execute("SELECT name FROM categories WHERE id=?", (cat_id,))
+        name = self.cursor.fetchone()[0]
+        text_height = text_font.metrics("linespace") + 10
+        height = max(30, text_height)
 
-        x1, y1, x2, y2, width, height = self.cat_positions[cat_id]
-        y_offset = y1 + 50  # Espace pour le titre de la catégorie
+        # Si le nœud n'est pas déplié, sa hauteur est juste celle du nœud
+        if cat_id not in self.expanded_nodes:
+            self.node_heights[cat_id] = height + 40  # Espace minimal
+            return self.node_heights[cat_id]
 
-        # Positionner les sous-catégories
+        # Calculer la hauteur des sous-catégories
+        total_height = height + 40  # Hauteur du nœud + espace
+        self.cursor.execute("SELECT id FROM categories WHERE parent_id=?", (cat_id,))
+        subcats = self.cursor.fetchall()
+        for subcat_id, in subcats:
+            sub_height = self.calculate_subtree_height(subcat_id)
+            total_height += sub_height
+
+        # Calculer la hauteur des compteurs
+        self.cursor.execute("SELECT id FROM meters WHERE category_id=? ORDER BY name", (cat_id,))
+        meters = self.cursor.fetchall()
+        for meter_id, in meters:
+            _, meter_height = self.meter_sizes[meter_id]
+            total_height += meter_height + 20  # Espace entre compteurs
+
+        self.node_heights[cat_id] = total_height
+        return total_height
+
+    def draw_category_tree(self, cat_id, x_base, level):
+        text_font = font.Font(family="Arial", size=12, weight="bold")
+        x_pos = x_base + level * 250  # Espacement horizontal entre niveaux
+
+        # Initialiser la position Y pour ce niveau si nécessaire
+        if level not in self.level_positions:
+            self.level_positions[level] = 20
+        y_pos = self.level_positions[level]
+
+        # Dessiner le nœud de la catégorie
+        self.cursor.execute("SELECT name FROM categories WHERE id=?", (cat_id,))
+        name = self.cursor.fetchone()[0]
+        text_width = text_font.measure(name) + 20
+        text_height = text_font.metrics("linespace") + 10
+        width = max(150, text_width)
+        height = max(30, text_height)
+        self.node_positions[(cat_id, "category")] = (x_pos, y_pos, width, height)
+
+        # Mettre à jour la position Y pour le prochain nœud du même niveau
+        self.level_positions[level] = y_pos + self.node_heights.get(cat_id, height + 40)
+
+        # Si le nœud n'est pas déplié, on s'arrête ici
+        if cat_id not in self.expanded_nodes:
+            return
+
+        # Dessiner les sous-catégories
         self.cursor.execute("SELECT id, name FROM categories WHERE parent_id=?", (cat_id,))
         subcats = self.cursor.fetchall()
-        for subcat_id, name in subcats:
-            text_width = text_font.measure(name) + 20
-            sub_width = max(180, text_width)
-            sub_height = 50  # Hauteur initiale
-            self.cat_positions[subcat_id] = (x_base + 10, y_offset, x_base + 10 + sub_width, y_offset + sub_height, sub_width, sub_height)
-            self.cursor.execute("UPDATE categories SET x_pos=?, y_pos=? WHERE id=?", (x_base + 10, y_offset, subcat_id))
-            y_offset = self.calculate_category_height(subcat_id, x_base + 10, y_offset)
+        y_offset = y_pos + height + 40
+        for subcat_id, _ in subcats:
+            self.level_positions[level + 1] = y_offset
+            self.draw_category_tree(subcat_id, x_base, level + 1)
+            y_offset += self.node_heights.get(subcat_id, 0)
 
-        # Positionner les compteurs après les sous-catégories
+        # Dessiner les compteurs
         self.cursor.execute("SELECT id, name FROM meters WHERE category_id=? ORDER BY name", (cat_id,))
         meters = self.cursor.fetchall()
+        meter_level = level + 1
+        y_pos = y_offset if subcats else y_pos + height + 40
+        self.level_positions[meter_level] = y_pos
         for meter_id, _ in meters:
             width, height = self.meter_sizes[meter_id]
-            self.meter_positions[meter_id] = (x_base + 10, y_offset)
-            self.cursor.execute("UPDATE meters SET x_pos=?, y_pos=? WHERE id=?", (x_base + 10, y_offset, meter_id))
-            y_offset += height + 10  # Espacement entre compteurs
+            self.node_positions[(meter_id, "meter")] = (x_pos + 250, y_pos, width, height)
+            self.cursor.execute("UPDATE meters SET x_pos=?, y_pos=? WHERE id=?", (x_pos + 250, y_pos, meter_id))
+            y_pos += height + 20  # Espace entre compteurs
+        if meters:
+            self.level_positions[meter_level] = y_pos
 
-        # Mettre à jour la hauteur de la catégorie
-        new_height = max(50, y_offset - y1 + 10)
-        self.cat_positions[cat_id] = (x1, y1, x2, y1 + new_height, width, new_height)
-        self.cursor.execute("UPDATE categories SET height=? WHERE id=?", (new_height, cat_id))
-        return y1 + new_height + 70  # Retourner la position Y pour la prochaine catégorie
+    def draw_nodes(self):
+        self.canvas.delete("all")
+        # Dessiner les nœuds
+        tooltips = []
+        for (node_id, node_type), (x, y, width, height) in self.node_positions.items():
+            if node_type == "category":
+                fill_color = "#D3D3D3" if not self.cursor.execute("SELECT parent_id FROM categories WHERE id=?", (node_id,)).fetchone()[0] else "#ADD8E6"
+                self.cursor.execute("SELECT name FROM categories WHERE id=?", (node_id,))
+                name = self.cursor.fetchone()[0]
+                prefix = "+" if node_id not in self.expanded_nodes else "-"
+                # Aligner à gauche
+                rect = self.canvas.create_rectangle(x, y - height/2, x + width, y + height/2, fill=fill_color, tags=f"cat_{node_id}")
+                self.canvas.create_text(x + 10, y, text=f"{prefix} {name}", font=("Arial", 12, "bold"), anchor="w", tags=f"cat_{node_id}_text")
+                # Ajouter une infobulle
+                self.cursor.execute("SELECT COUNT(*) FROM meters WHERE category_id=?", (node_id,))
+                meter_count = self.cursor.fetchone()[0]
+                tooltip_text = f"Catégorie: {name}\nCompteurs: {meter_count}"
+                tooltips.append(Tooltip(self.canvas, rect, tooltip_text))
+            elif node_type == "meter":
+                self.cursor.execute("SELECT name, note FROM meters WHERE id=?", (node_id,))
+                name, note = self.cursor.fetchone()
+                # Aligner à gauche
+                rect = self.canvas.create_rectangle(x, y - height/2, x + width, y + height/2, fill="#FFC107", tags=f"meter_{node_id}")
+                self.canvas.create_text(x + 10, y, text=name, font=("Arial", 10), anchor="w", tags=f"meter_{node_id}_text")
+                # Ajouter une infobulle
+                tooltip_text = f"Compteur: {name}\nNote: {note if note else 'Aucune'}"
+                tooltips.append(Tooltip(self.canvas, rect, tooltip_text))
+
+        # Dessiner les connexions avec des coudes
+        self.cursor.execute("SELECT id, parent_id FROM categories")
+        categories = self.cursor.fetchall()
+        for cat_id, parent_id in categories:
+            if parent_id and (cat_id, "category") in self.node_positions and (parent_id, "category") in self.node_positions:
+                if parent_id in self.expanded_nodes:
+                    x1, y1, w1, _ = self.node_positions[(parent_id, "category")]
+                    x2, y2, w2, _ = self.node_positions[(cat_id, "category")]
+                    mid_x = x1 + w1 + (x2 - (x1 + w1)) / 2
+                    self.canvas.create_line(x1 + w1, y1, mid_x, y1, mid_x, y2, x2, y2, fill="black", width=1)
+
+        self.cursor.execute("SELECT id, category_id FROM meters")
+        meters = self.cursor.fetchall()
+        for meter_id, category_id in meters:
+            if (meter_id, "meter") in self.node_positions and (category_id, "category") in self.node_positions:
+                if category_id in self.expanded_nodes:
+                    x1, y1, w1, _ = self.node_positions[(category_id, "category")]
+                    x2, y2, w2, _ = self.node_positions[(meter_id, "meter")]
+                    mid_x = x1 + w1 + (x2 - (x1 + w1)) / 2
+                    self.canvas.create_line(x1 + w1, y1, mid_x, y1, mid_x, y2, x2, y2, fill="black", width=1)
+
+    def on_node_click(self, event):
+        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        items = self.canvas.find_overlapping(x-5, y-5, x+5, y+5)
+        for item in items:
+            tags = self.canvas.gettags(item)
+            if tags:
+                if "cat_" in tags[0]:
+                    cat_id = int(tags[0].split("_")[1])
+                    # Sélectionner la catégorie dans le Treeview
+                    for tree_item in self.tree.get_children():
+                        values = self.tree.item(tree_item)["values"]
+                        if values and values[0] == f"cat_{cat_id}":
+                            self.tree.selection_set(tree_item)
+                            self.edit_category()  # Remplir le formulaire
+                            break
+                    self.dragging_node = (cat_id, "category")
+                    self.dragging_start = (x, y)
+                    return
+                elif "meter_" in tags[0]:
+                    meter_id = tags[0].split("_")[1]
+                    # Sélectionner le compteur dans le Treeview
+                    for tree_item in self.tree.get_children():
+                        values = self.tree.item(tree_item)["values"]
+                        if values and str(values[0]) == meter_id:
+                            self.tree.selection_set(tree_item)
+                            self.edit_meter()  # Remplir le formulaire
+                            break
+                    self.dragging_node = (meter_id, "meter")
+                    self.dragging_start = (x, y)
+                    return
+        self.dragging_node = None
+
+    def on_node_double_click(self, event):
+        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        items = self.canvas.find_overlapping(x-5, y-5, x+5, y+5)
+        for item in items:
+            tags = self.canvas.gettags(item)
+            if tags and "cat_" in tags[0]:
+                cat_id = int(tags[0].split("_")[1])
+                # Basculer l'état déplié/replié
+                if cat_id in self.expanded_nodes:
+                    self.expanded_nodes.remove(cat_id)
+                else:
+                    self.expanded_nodes.add(cat_id)
+                self.dragging_node = None  # Annuler le drag-and-drop
+                self.update_ui()
+                return
+
+    def on_node_drag(self, event):
+        if not self.dragging_node:
+            return
+        node_id, node_type = self.dragging_node
+        # Vérifier si le nœud existe encore dans node_positions
+        if (node_id, node_type) not in self.node_positions:
+            self.dragging_node = None
+            return
+        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        dx = x - self.dragging_start[0]
+        dy = y - self.dragging_start[1]
+        current_pos = self.node_positions[(node_id, node_type)]
+        new_pos = (current_pos[0] + dx, current_pos[1] + dy, current_pos[2], current_pos[3])
+        self.node_positions[(node_id, node_type)] = new_pos
+        self.dragging_start = (x, y)
+        self.draw_nodes()
+
+    def on_node_release(self, event):
+        if not self.dragging_node:
+            return
+        node_id, node_type = self.dragging_node
+        # Vérifier si le nœud existe encore dans node_positions
+        if (node_id, node_type) not in self.node_positions:
+            self.dragging_node = None
+            return
+        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        if node_type == "meter":
+            # Trouver la catégorie la plus proche
+            closest_cat = None
+            min_dist = float("inf")
+            for (cat_id, cat_type), (cx, cy, cw, ch) in self.node_positions.items():
+                if cat_type == "category":
+                    dist = ((x - cx)**2 + (y - cy)**2)**0.5
+                    if dist < min_dist:
+                        min_dist = dist
+                        closest_cat = cat_id
+            if closest_cat:
+                self.cursor.execute("UPDATE meters SET category_id=? WHERE id=?", (closest_cat, node_id))
+                self.conn.commit()
+        self.dragging_node = None
+        self.update_ui()
 
     def add_meter(self):
         name = self.meter_name.get()
@@ -524,25 +723,3 @@ class DBDesigner:
             else:
                 self.edit_meter_btn.config(state="normal")
                 self.delete_meter_btn.config(state="normal")
-
-    def select_item(self, event):
-        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
-        items = self.canvas.find_overlapping(x-5, y-5, x+5, y+5)
-        for item in items:
-            tags = self.canvas.gettags(item)
-            if tags and "text" in tags[0]:
-                if "meter" in tags[0]:
-                    meter_id = tags[0].split("_")[1]
-                    for tree_item in self.tree.get_children():
-                        values = self.tree.item(tree_item)["values"]
-                        if values and str(values[0]) == meter_id:
-                            self.tree.selection_set(tree_item)
-                            break
-                elif "cat" in tags[0]:
-                    cat_id = tags[0].split("_")[1]
-                    for tree_item in self.tree.get_children():
-                        values = self.tree.item(tree_item)["values"]
-                        if values and values[0] == f"cat_{cat_id}":
-                            self.tree.selection_set(tree_item)
-                            break
-                break
