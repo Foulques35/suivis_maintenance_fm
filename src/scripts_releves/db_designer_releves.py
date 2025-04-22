@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, font
 
 class DBDesigner:
     def __init__(self, parent, conn):
@@ -130,7 +130,7 @@ class DBDesigner:
         ttk.Label(frame, text="Nom :").pack(side="left")
         name_entry = ttk.Entry(frame)
         name_entry.pack(side="left", fill="x", expand=True, padx=5)
-        ttk.Label(frame, text="Min :").pack(side="left")  # Renommé "Cible" en "Min"
+        ttk.Label(frame, text="Min :").pack(side="left")
         target_entry = ttk.Entry(frame, width=10)
         target_entry.pack(side="left", padx=5)
         ttk.Label(frame, text="Max :").pack(side="left")
@@ -178,19 +178,35 @@ class DBDesigner:
         # Canvas
         self.canvas.delete("all")
         self.cat_positions = {}
+        self.meter_positions = {}
         x_pos = 20
         y_pos = 20
-        self.cursor.execute("SELECT id, name, width, height FROM categories WHERE parent_id IS NULL")
+        text_font = font.Font(family="Arial", size=10, weight="bold")
+        meter_font = font.Font(family="Arial", size=10)
+
+        # Calculer les tailles des rectangles pour les compteurs
+        self.meter_sizes = {}
+        self.cursor.execute("SELECT id, name, category_id FROM meters ORDER BY name")
+        meters = self.cursor.fetchall()
+        for meter_id, name, category_id in meters:
+            text_width = meter_font.measure(name) + 20  # Padding
+            text_height = meter_font.metrics("linespace") + 10
+            self.meter_sizes[meter_id] = (max(130, text_width), max(30, text_height))
+
+        # Positionner les catégories principales verticalement
+        self.cursor.execute("SELECT id, name FROM categories WHERE parent_id IS NULL")
         top_categories = self.cursor.fetchall()
         top_cat_ids = [cat[0] for cat in top_categories]
-        for cat_id, name, width, height in top_categories:
+
+        for cat_id, name in top_categories:
+            text_width = text_font.measure(name) + 20
+            width = max(200, text_width)
+            height = 50  # Hauteur initiale
             self.cat_positions[cat_id] = (x_pos, y_pos, x_pos + width, y_pos + height, width, height)
             self.cursor.execute("UPDATE categories SET x_pos=?, y_pos=? WHERE id=?", (x_pos, y_pos, cat_id))
-            x_pos += width + 70
+            y_pos = self.calculate_category_height(cat_id, x_pos, y_pos)
 
-        for cat_id in top_cat_ids:
-            self.calculate_category_height(cat_id)
-
+        # Dessiner les catégories
         self.cursor.execute("SELECT id, name, x_pos, y_pos, width, height, parent_id FROM categories")
         categories = self.cursor.fetchall()
         for cat_id, name, x_pos, y_pos, width, height, parent_id in categories:
@@ -204,43 +220,49 @@ class DBDesigner:
             self.canvas.create_rectangle(x_pos, y_pos, x_pos + width, y_pos + height, fill=fill_color, tags=f"cat_{cat_id}")
             self.canvas.create_text(x_pos + width/2, y_pos + 15, text=name, font=("Arial", 10, "bold"), tags=f"cat_{cat_id}_text")
 
-        self.cursor.execute("SELECT id, name, category_id, x_pos, y_pos FROM meters")
-        meters = self.cursor.fetchall()
-        for meter_id, name, category_id, x_pos, y_pos in meters:
-            x_pos = x_pos or 20
-            y_pos = y_pos or 60
-            self.canvas.create_rectangle(x_pos, y_pos, x_pos + 130, y_pos + 30, fill="#FFC107", tags=f"meter_{meter_id}")
-            self.canvas.create_text(x_pos + 65, y_pos + 15, text=name, tags=f"meter_{meter_id}_text")
+        # Dessiner les compteurs
+        for meter_id, name, category_id in meters:
+            if meter_id in self.meter_positions:
+                x_pos, y_pos = self.meter_positions[meter_id]
+                width, height = self.meter_sizes[meter_id]
+                self.canvas.create_rectangle(x_pos, y_pos, x_pos + width, y_pos + height, fill="#FFC107", tags=f"meter_{meter_id}")
+                self.canvas.create_text(x_pos + width/2, y_pos + height/2, text=name, font=("Arial", 10), tags=f"meter_{meter_id}_text")
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 1000, 1000))
 
-    def calculate_category_height(self, cat_id):
+    def calculate_category_height(self, cat_id, x_base, y_base):
+        text_font = font.Font(family="Arial", size=10, weight="bold")
         if cat_id not in self.cat_positions:
-            return 50
+            return y_base
+
         x1, y1, x2, y2, width, height = self.cat_positions[cat_id]
-        y_offset = y1 + 50
+        y_offset = y1 + 50  # Espace pour le titre de la catégorie
 
-        self.cursor.execute("SELECT id, width, height FROM categories WHERE parent_id=?", (cat_id,))
+        # Positionner les sous-catégories
+        self.cursor.execute("SELECT id, name FROM categories WHERE parent_id=?", (cat_id,))
         subcats = self.cursor.fetchall()
-        for subcat_id, sub_width, sub_height in subcats:
-            self.cat_positions[subcat_id] = (x1 + 10, y_offset, x1 + 10 + sub_width, y_offset + sub_height, sub_width, sub_height)
-            self.cursor.execute("UPDATE categories SET x_pos=?, y_pos=? WHERE id=?", (x1 + 10, y_offset, subcat_id))
-            sub_height = self.calculate_category_height(subcat_id)
-            self.cat_positions[subcat_id] = (x1 + 10, y_offset, x1 + 10 + sub_width, y_offset + sub_height, sub_width, sub_height)
-            self.cursor.execute("UPDATE categories SET x_pos=?, y_pos=?, height=? WHERE id=?", (x1 + 10, y_offset, sub_height, subcat_id))
-            y_offset += sub_height + 10
+        for subcat_id, name in subcats:
+            text_width = text_font.measure(name) + 20
+            sub_width = max(180, text_width)
+            sub_height = 50  # Hauteur initiale
+            self.cat_positions[subcat_id] = (x_base + 10, y_offset, x_base + 10 + sub_width, y_offset + sub_height, sub_width, sub_height)
+            self.cursor.execute("UPDATE categories SET x_pos=?, y_pos=? WHERE id=?", (x_base + 10, y_offset, subcat_id))
+            y_offset = self.calculate_category_height(subcat_id, x_base + 10, y_offset)
 
-        self.cursor.execute("SELECT id FROM meters WHERE category_id=?", (cat_id,))
+        # Positionner les compteurs après les sous-catégories
+        self.cursor.execute("SELECT id, name FROM meters WHERE category_id=? ORDER BY name", (cat_id,))
         meters = self.cursor.fetchall()
-        for meter_id in meters:
-            meter_id = meter_id[0]
-            self.cursor.execute("UPDATE meters SET x_pos=?, y_pos=? WHERE id=?", (x1 + 10, y_offset, meter_id))
-            y_offset += 40
+        for meter_id, _ in meters:
+            width, height = self.meter_sizes[meter_id]
+            self.meter_positions[meter_id] = (x_base + 10, y_offset)
+            self.cursor.execute("UPDATE meters SET x_pos=?, y_pos=? WHERE id=?", (x_base + 10, y_offset, meter_id))
+            y_offset += height + 10  # Espacement entre compteurs
 
+        # Mettre à jour la hauteur de la catégorie
         new_height = max(50, y_offset - y1 + 10)
         self.cat_positions[cat_id] = (x1, y1, x2, y1 + new_height, width, new_height)
         self.cursor.execute("UPDATE categories SET height=? WHERE id=?", (new_height, cat_id))
-        return new_height
+        return y1 + new_height + 70  # Retourner la position Y pour la prochaine catégorie
 
     def add_meter(self):
         name = self.meter_name.get()
@@ -262,7 +284,7 @@ class DBDesigner:
                     target = float(target) if target else None
                     max_val = float(max_val) if max_val else None
                 except ValueError:
-                    messagebox.showwarning("Erreur", "Min et Max doivent être des nombres ou vides.")  # Renommé "Cible" en "Min"
+                    messagebox.showwarning("Erreur", "Min et Max doivent être des nombres ou vides.")
                     return
                 self.cursor.execute("INSERT INTO parameters (meter_id, name, target, max_value, unit) VALUES (?, ?, ?, ?, ?)",
                                    (meter_id, param_name, target, max_val, unit))
@@ -333,7 +355,7 @@ class DBDesigner:
                     target = float(target) if target else None
                     max_val = float(max_val) if max_val else None
                 except ValueError:
-                    messagebox.showwarning("Erreur", "Min et Max doivent être des nombres ou vides.")  # Renommé "Cible" en "Min"
+                    messagebox.showwarning("Erreur", "Min et Max doivent être des nombres ou vides.")
                     return
                 param_id = getattr(frame, 'param_id', None)
                 new_params.append((param_id, param_name, target, max_val, unit))
