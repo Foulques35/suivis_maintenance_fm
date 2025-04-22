@@ -2,19 +2,21 @@ import os
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from datetime import datetime
-import shutil
-import subprocess
+import sqlite3
 import calendar
 import csv
 from datetime import datetime, timedelta
 
 class MeterReadings:
-    def __init__(self, parent, conn):
+    def __init__(self, parent, conn, conn_library):
         self.parent = parent
         self.conn = conn
+        self.conn_library = conn_library  # Connexion à library.db
         self.cursor = None if conn is None else conn.cursor()
+        self.cursor_library = None if conn_library is None else conn_library.cursor()
         self.current_meter_id = None
         self.current_reading_id = None
+        self.current_library_file_id = None  # ID du fichier associé
         self.last_parameter = {}
         self.parameter_map = {}
         self.form_locked = True
@@ -98,14 +100,18 @@ class MeterReadings:
         self.unit_label = ttk.Label(self.target_frame, text="-")
         self.unit_label.pack(side="left", padx=5)
 
+        # Label pour afficher le fichier associé
+        self.associated_file_label = ttk.Label(self.form_frame, text="Fichier associé: Aucun")
+        self.associated_file_label.pack(fill="x", padx=5, pady=5)
+
         buttons_frame = ttk.Frame(self.form_frame)
         buttons_frame.pack(fill="x", padx=5, pady=5)
         ttk.Button(buttons_frame, text="Ajouter Relevé", command=self.add_reading, style="Blue.TButton").pack(side="left", padx=5)
         ttk.Button(buttons_frame, text="Enregistrer", command=self.save_reading, style="Green.TButton").pack(side="left", padx=5)
         ttk.Button(buttons_frame, text="Modifier", command=self.edit_reading, style="Yellow.TButton").pack(side="left", padx=5)
         ttk.Button(buttons_frame, text="Supprimer", command=self.delete_reading, style="Red.TButton").pack(side="left", padx=5)
-        ttk.Button(buttons_frame, text="Ajouter Fichier", command=self.add_file, style="Blue.TButton").pack(side="left", padx=5)
-        ttk.Button(buttons_frame, text="Supprimer Fichier", command=self.delete_file, style="Red.TButton").pack(side="left", padx=5)
+        ttk.Button(buttons_frame, text="Associer Fichier", command=self.associate_file, style="Blue.TButton").pack(side="left", padx=5)
+        ttk.Button(buttons_frame, text="Dissocier Fichier", command=self.dissociate_file, style="Red.TButton").pack(side="left", padx=5)
         ttk.Button(buttons_frame, text="Ouvrir Fichier", command=self.open_file, style="Yellow.TButton").pack(side="left", padx=5)
 
         style = ttk.Style()
@@ -166,12 +172,6 @@ class MeterReadings:
         self.readings_tree.tag_configure("ok", background="white")
         self.readings_tree.bind("<<TreeviewSelect>>", self.load_selected_reading)
 
-        self.files_frame = ttk.LabelFrame(self.right_frame, text="Fichiers")
-        self.right_frame.add(self.files_frame, weight=1)
-
-        self.files_listbox = tk.Listbox(self.files_frame)
-        self.files_listbox.pack(fill="both", expand=True, padx=5, pady=5)
-
         self.lock_form()
         self.load_meters_to_tree()
 
@@ -215,7 +215,7 @@ class MeterReadings:
     def filter_readings(self, event=None):
         search_term = self.readings_search_entry.get().lower()
         period = self.date_filter_var.get()
-        self.cursor.execute("SELECT id, meter_id, parameter_id, date, value, note, attachment_path FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
+        self.cursor.execute("SELECT id, meter_id, parameter_id, date, value, note, library_file_id FROM readings WHERE meter_id=? ORDER BY date", (self.current_meter_id,))
         readings = self.cursor.fetchall()
         for item in self.readings_tree.get_children():
             self.readings_tree.delete(item)
@@ -237,7 +237,7 @@ class MeterReadings:
         else:
             start_date = None
             end_date = None
-        for reading_id, meter_id, param_id, date, value, note, attachment in readings:
+        for reading_id, meter_id, param_id, date, value, note, library_file_id in readings:
             reading_date = datetime.strptime(date, "%Y-%m-%d")
             if start_date and end_date:
                 if not (start_date <= reading_date <= end_date):
@@ -381,7 +381,6 @@ class MeterReadings:
             self.parameter_map[param_name] = param_id
         self.parameter_combobox["values"] = param_names
         if param_names:
-            # Toujours définir last_parameter pour garantir qu'un paramètre est sélectionné
             last_param = self.last_parameter.get(self.current_meter_id, param_names[0])
             if last_param in param_names:
                 self.parameter_var.set(last_param)
@@ -466,16 +465,15 @@ class MeterReadings:
                 messagebox.showwarning("Attention", f"Valeur dépasse le maximum ({max_val}) !")
             self.last_parameter[self.current_meter_id] = param_name
             if self.current_reading_id:
-                self.cursor.execute("UPDATE readings SET meter_id=?, parameter_id=?, date=?, value=?, note=?, attachment_path=? WHERE id=?",
-                                   (self.current_meter_id, param_id, date, value, note, None, self.current_reading_id))
+                self.cursor.execute("UPDATE readings SET meter_id=?, parameter_id=?, date=?, value=?, note=?, library_file_id=? WHERE id=?",
+                                   (self.current_meter_id, param_id, date, value, note, self.current_library_file_id, self.current_reading_id))
             else:
-                self.cursor.execute("INSERT INTO readings (meter_id, parameter_id, date, value, note, attachment_path) VALUES (?, ?, ?, ?, ?, ?)",
-                                   (self.current_meter_id, param_id, date, value, note, None))
+                self.cursor.execute("INSERT INTO readings (meter_id, parameter_id, date, value, note, library_file_id) VALUES (?, ?, ?, ?, ?, ?)",
+                                   (self.current_meter_id, param_id, date, value, note, self.current_library_file_id))
             self.conn.commit()
             self.clear_form()
             self.update_parameters()
             self.load_readings()
-            self.load_files()
             messagebox.showinfo("Succès", "Relevé enregistré.")
         except ValueError:
             messagebox.showwarning("Erreur", "La valeur doit être un nombre.")
@@ -488,12 +486,13 @@ class MeterReadings:
     def load_selected_reading(self, event):
         selected_item = self.readings_tree.selection()
         if not selected_item:
-            self.files_listbox.delete(0, tk.END)
+            self.associated_file_label.config(text="Fichier associé: Aucun")
             return
         reading_id = self.readings_tree.item(selected_item)["values"][0]
         self.current_reading_id = reading_id
-        self.cursor.execute("SELECT meter_id, parameter_id, date, value, note, attachment_path FROM readings WHERE id=?", (reading_id,))
-        meter_id, param_id, date, value, note, attachment_path = self.cursor.fetchone()
+        self.cursor.execute("SELECT meter_id, parameter_id, date, value, note, library_file_id FROM readings WHERE id=?", (reading_id,))
+        meter_id, param_id, date, value, note, library_file_id = self.cursor.fetchone()
+        self.current_library_file_id = library_file_id
         self.cursor.execute("SELECT m.name, c.name FROM meters m JOIN categories c ON m.category_id = c.id WHERE m.id=?", (meter_id,))
         meter_name, category_name = self.cursor.fetchone()
         self.meter_var.set(f"{meter_name} ({category_name})")
@@ -514,18 +513,27 @@ class MeterReadings:
         self.note_var.set(note if note else "")
         self.show_targets()
         self.lock_form()
-        self.load_files()
+        # Afficher le fichier associé
+        if self.current_library_file_id:
+            self.cursor_library.execute("SELECT title FROM library WHERE id=?", (self.current_library_file_id,))
+            file_title = self.cursor_library.fetchone()
+            if file_title:
+                self.associated_file_label.config(text=f"Fichier associé: {file_title[0]}")
+            else:
+                self.associated_file_label.config(text="Fichier associé: [Introuvable]")
+        else:
+            self.associated_file_label.config(text="Fichier associé: Aucun")
 
     def clear_form(self):
         self.current_reading_id = None
+        self.current_library_file_id = None
         self.day_var.set(f"{datetime.now().day:02d}")
         self.month_var.set(f"{datetime.now().month:02d}")
         self.year_var.set(str(datetime.now().year))
         self.value_var.set("")
         self.note_var.set("")
-        # Ne pas réinitialiser self.parameter_var ici pour préserver le paramètre sélectionné
+        self.associated_file_label.config(text="Fichier associé: Aucun")
         self.load_readings()
-        self.files_listbox.delete(0, tk.END)
         self.lock_form()
 
     def edit_reading(self):
@@ -539,70 +547,152 @@ class MeterReadings:
             messagebox.showwarning("Erreur", "Sélectionnez un relevé à supprimer.")
             return
         if messagebox.askyesno("Confirmer", "Voulez-vous supprimer ce relevé ?"):
-            self.cursor.execute("SELECT attachment_path FROM readings WHERE id=?", (self.current_reading_id,))
-            attachment_path = self.cursor.fetchone()[0]
-            if attachment_path and os.path.exists(attachment_path):
-                os.remove(attachment_path)
             self.cursor.execute("DELETE FROM readings WHERE id=?", (self.current_reading_id,))
             self.conn.commit()
             self.clear_form()
             self.load_readings()
-            self.load_files()
 
-    def load_files(self):
-        self.files_listbox.delete(0, tk.END)
+    def associate_file(self):
         if not self.current_reading_id:
+            messagebox.showwarning("Erreur", "Sélectionnez un relevé pour associer un fichier.")
             return
-        self.cursor.execute("SELECT attachment_path FROM readings WHERE id=? AND attachment_path IS NOT NULL", (self.current_reading_id,))
-        file_path = self.cursor.fetchone()
-        if file_path:
-            file_path = file_path[0]
-            if file_path and os.path.exists(file_path):
-                self.files_listbox.insert(tk.END, os.path.basename(file_path))
+        select_window = tk.Toplevel(self.parent)
+        select_window.title("Sélectionner une pièce")
+        select_window.geometry("800x600")
+        select_window.transient(self.parent)
+        select_window.grab_set()
 
-    def add_file(self):
+        paned_window = ttk.PanedWindow(select_window, orient=tk.HORIZONTAL)
+        paned_window.pack(fill="both", expand=True, padx=5, pady=5)
+
+        folder_frame = ttk.LabelFrame(paned_window, text="Dossiers")
+        paned_window.add(folder_frame, weight=1)
+
+        search_frame = ttk.Frame(folder_frame)
+        search_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(search_frame, text="Catégorie :").pack(side="left")
+        self.category_search_var = tk.StringVar()
+        category_search_entry = ttk.Entry(search_frame, textvariable=self.category_search_var)
+        category_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ttk.Label(search_frame, text="Projet :").pack(side="left")
+        self.project_search_var = tk.StringVar()
+        project_search_entry = ttk.Entry(search_frame, textvariable=self.project_search_var)
+        project_search_entry.pack(side="left", fill="x", expand=True)
+
+        folder_tree = ttk.Treeview(folder_frame, columns=("Year", "Category", "Project"), show="headings")
+        folder_tree.heading("Year", text="Année")
+        folder_tree.heading("Category", text="Catégorie")
+        folder_tree.heading("Project", text="Projet")
+        folder_tree.column("Year", width=100)
+        folder_tree.column("Category", width=150)
+        folder_tree.column("Project", width=200)
+        folder_tree.pack(fill="both", expand=True, padx=5, pady=5)
+
+        file_frame = ttk.LabelFrame(paned_window, text="Fichiers")
+        paned_window.add(file_frame, weight=3)
+
+        file_search_frame = ttk.Frame(file_frame)
+        file_search_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(file_search_frame, text="Rechercher fichier :").pack(side="left")
+        self.file_search_var = tk.StringVar()
+        file_search_entry = ttk.Entry(file_search_frame, textvariable=self.file_search_var)
+        file_search_entry.pack(side="left", fill="x", expand=True)
+
+        file_tree = ttk.Treeview(file_frame, columns=("ID", "Title"), show="headings")
+        file_tree.heading("ID", text="ID")
+        file_tree.heading("Title", text="Titre")
+        file_tree.column("ID", width=50)
+        file_tree.column("Title", width=450)
+        file_tree.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.cursor_library.execute("SELECT DISTINCT year, category, project FROM library WHERE file_path != '' OR title = '[Dossier]'")
+        folder_data = self.cursor_library.fetchall()
+        for row in folder_data:
+            folder_tree.insert("", tk.END, values=row)
+
+        def filter_folders(event=None):
+            for item in folder_tree.get_children():
+                folder_tree.delete(item)
+            category_search = self.category_search_var.get().lower()
+            project_search = self.project_search_var.get().lower()
+            filtered_data = [
+                row for row in folder_data
+                if (not category_search or category_search in row[1].lower())
+                and (not project_search or project_search in row[2].lower())
+            ]
+            for row in filtered_data:
+                folder_tree.insert("", tk.END, values=row)
+
+        def load_and_filter_files(event=None):
+            for item in file_tree.get_children():
+                file_tree.delete(item)
+            selected = folder_tree.selection()
+            if not selected:
+                return
+            year, category, project = folder_tree.item(selected[0])["values"]
+            file_search = self.file_search_var.get().lower()
+            self.cursor_library.execute("SELECT id, title FROM library WHERE year=? AND category=? AND project=? AND file_path != ''",
+                                       (year, category, project))
+            files = self.cursor_library.fetchall()
+            filtered_files = [
+                row for row in files
+                if not file_search or file_search in row[1].lower()
+            ]
+            for row in filtered_files:
+                file_tree.insert("", tk.END, values=row)
+
+        category_search_entry.bind("<KeyRelease>", filter_folders)
+        project_search_entry.bind("<KeyRelease>", filter_folders)
+        file_search_entry.bind("<KeyRelease>", load_and_filter_files)
+        folder_tree.bind("<<TreeviewSelect>>", load_and_filter_files)
+        filter_folders()
+
+        def apply_selection():
+            file_selected = file_tree.selection()
+            if not file_selected:
+                messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce.")
+                return
+            file_id = file_tree.item(file_selected[0])["values"][0]
+            self.cursor.execute("UPDATE readings SET library_file_id=? WHERE id=?", (file_id, self.current_reading_id))
+            self.conn.commit()
+            self.current_library_file_id = file_id
+            self.cursor_library.execute("SELECT title FROM library WHERE id=?", (file_id,))
+            file_title = self.cursor_library.fetchone()
+            if file_title:
+                self.associated_file_label.config(text=f"Fichier associé: {file_title[0]}")
+            select_window.destroy()
+
+        ttk.Button(select_window, text="Associer", command=apply_selection).pack(pady=5)
+        ttk.Button(select_window, text="Annuler", command=select_window.destroy).pack(pady=5)
+
+    def dissociate_file(self):
         if not self.current_reading_id:
-            messagebox.showwarning("Erreur", "Sélectionnez un relevé pour ajouter un fichier.")
+            messagebox.showwarning("Erreur", "Sélectionnez un relevé pour dissocier un fichier.")
             return
-        file_path = filedialog.askopenfilename()
-        if not file_path:
+        if not self.current_library_file_id:
+            messagebox.showwarning("Erreur", "Aucun fichier associé à ce relevé.")
             return
-        self.cursor.execute("SELECT name FROM meters WHERE id=?", (self.current_meter_id,))
-        meter_name = self.cursor.fetchone()[0]
-        year = self.year_var.get()
-        month = self.month_var.get()
-        dest_dir = os.path.join(os.path.dirname(__file__), "..", "fichiers", year, month, meter_name)
-        os.makedirs(dest_dir, exist_ok=True)
-        dest_file = os.path.join(dest_dir, os.path.basename(file_path))
-        shutil.copy2(file_path, dest_file)
-        attachment_path = os.path.join("fichiers", year, month, meter_name, os.path.basename(file_path))
-        self.cursor.execute("UPDATE readings SET attachment_path=? WHERE id=?", (attachment_path, self.current_reading_id))
-        self.conn.commit()
-        self.load_files()
-
-    def delete_file(self):
-        selected_file = self.files_listbox.curselection()
-        if not selected_file:
-            messagebox.showwarning("Erreur", "Sélectionnez un fichier à supprimer.")
-            return
-        file_name = self.files_listbox.get(selected_file)
-        self.cursor.execute("SELECT attachment_path FROM readings WHERE attachment_path LIKE ?", (f"%{file_name}",))
-        file_path = self.cursor.fetchone()[0]
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
-        self.cursor.execute("UPDATE readings SET attachment_path=NULL WHERE attachment_path LIKE ?", (f"%{file_name}",))
-        self.conn.commit()
-        self.load_files()
+        if messagebox.askyesno("Confirmer", "Voulez-vous dissocier le fichier de ce relevé ?"):
+            self.cursor.execute("UPDATE readings SET library_file_id=NULL WHERE id=?", (self.current_reading_id,))
+            self.conn.commit()
+            self.current_library_file_id = None
+            self.associated_file_label.config(text="Fichier associé: Aucun")
 
     def open_file(self):
-        selected_file = self.files_listbox.curselection()
-        if not selected_file:
-            messagebox.showwarning("Erreur", "Sélectionnez un fichier à ouvrir.")
+        if not self.current_library_file_id:
+            messagebox.showwarning("Erreur", "Aucun fichier associé à ouvrir.")
             return
-        file_name = self.files_listbox.get(selected_file)
-        self.cursor.execute("SELECT attachment_path FROM readings WHERE attachment_path LIKE ?", (f"%{file_name}",))
-        file_path = self.cursor.fetchone()[0]
+        self.cursor_library.execute("SELECT file_path FROM library WHERE id=?", (self.current_library_file_id,))
+        file_path_result = self.cursor_library.fetchone()
+        if not file_path_result:
+            messagebox.showerror("Erreur", "Fichier introuvable dans la bibliothèque.")
+            return
+        file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "bibliotheque", file_path_result[0]))
         if file_path and os.path.exists(file_path):
-            subprocess.run(['xdg-open', file_path], check=True)
+            import subprocess
+            try:
+                subprocess.run(['xdg-open', file_path], check=True)
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
         else:
             messagebox.showerror("Erreur", "Fichier introuvable.")

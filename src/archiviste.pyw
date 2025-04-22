@@ -233,7 +233,7 @@ class ArchivisteApp:
 
         # Initialisation des modules
         # Audit
-        self.db_designer_audit = AuditDBDesigner(self.tab1_audit, self.conn_audit)
+        self.db_designer_audit = AuditDBDesigner(self.tab1_audit, self.conn_audit, self.conn_library)
         print("Instantiating AuditMeterReadings...")
         self.meter_readings_audit = AuditMeterReadings(self.tab2_audit, self.conn_audit, self.conn_library)
         print("AuditMeterReadings instantiated successfully.")
@@ -425,7 +425,9 @@ class ArchivisteApp:
         self.conn_library = conn_library
         # Mise à jour des modules Audit
         self.db_designer_audit.conn = self.conn_audit
+        self.db_designer_audit.conn_library = self.conn_library
         self.db_designer_audit.cursor = self.conn_audit.cursor()
+        self.db_designer_audit.cursor_library = self.conn_library.cursor()
         self.db_designer_audit.update_ui()
         self.meter_readings_audit.conn = self.conn_audit
         self.meter_readings_audit.conn_library = self.conn_library

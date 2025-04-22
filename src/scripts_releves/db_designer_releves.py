@@ -1,8 +1,7 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox
 from datetime import datetime
 import os
-import shutil
 import subprocess
 
 class Tooltip:
@@ -29,10 +28,12 @@ class Tooltip:
             self.tooltip = None
 
 class DBDesigner:
-    def __init__(self, parent, conn):
+    def __init__(self, parent, conn, conn_library):
         self.parent = parent
         self.conn = conn
+        self.conn_library = conn_library  # Connexion à library.db
         self.cursor = self.conn.cursor()
+        self.cursor_library = self.conn_library.cursor()
         self.zoom_factor = 1.0
         self.param_entries = []
 
@@ -435,6 +436,7 @@ class DBDesigner:
         popup = tk.Toplevel(self.parent)
         popup.title("Ajouter un Relevé")
         popup.transient(self.parent)
+        popup.geometry("800x600")
 
         # Variables pour le formulaire
         parameter_var = tk.StringVar()
@@ -443,7 +445,8 @@ class DBDesigner:
         year_var = tk.StringVar(value=str(datetime.now().year))
         value_var = tk.StringVar()
         note_var = tk.StringVar()
-        attachment_path = tk.StringVar()
+        library_file_id_var = tk.StringVar()  # Pour stocker l'ID du fichier
+        file_title_var = tk.StringVar(value="Aucun fichier sélectionné")  # Pour afficher le titre
 
         # Formulaire
         form_frame = ttk.Frame(popup)
@@ -489,14 +492,14 @@ class DBDesigner:
 
         # Fichier joint
         ttk.Label(form_frame, text="Fichier :").grid(row=5, column=0, padx=5, pady=5, sticky="w")
-        file_label = ttk.Label(form_frame, text="Aucun fichier sélectionné")
+        file_label = ttk.Label(form_frame, textvariable=file_title_var)
         file_label.grid(row=5, column=1, columnspan=2, padx=5, pady=5, sticky="w")
-        ttk.Button(form_frame, text="Ajouter Fichier", command=lambda: self.select_file(attachment_path, file_label)).grid(row=5, column=3, padx=5, pady=5)
+        ttk.Button(form_frame, text="Associer Fichier", command=lambda: self.associate_file_popup(library_file_id_var, file_title_var)).grid(row=5, column=3, padx=5, pady=5)
 
         # Boutons
         buttons_frame = ttk.Frame(popup)
         buttons_frame.pack(fill="x", pady=10)
-        ttk.Button(buttons_frame, text="Enregistrer", command=lambda: self.add_reading_from_popup(meter_id, parameter_var.get(), parameter_map, day_var.get(), month_var.get(), year_var.get(), value_var.get(), note_var.get(), attachment_path.get(), popup)).pack(side="right", padx=5)
+        ttk.Button(buttons_frame, text="Enregistrer", command=lambda: self.add_reading_from_popup(meter_id, parameter_var.get(), parameter_map, day_var.get(), month_var.get(), year_var.get(), value_var.get(), note_var.get(), library_file_id_var.get(), popup)).pack(side="right", padx=5)
         ttk.Button(buttons_frame, text="Annuler", command=popup.destroy).pack(side="right", padx=5)
 
         # Retarder l'appel à grab_set pour s'assurer que la fenêtre est rendue
@@ -509,14 +512,113 @@ class DBDesigner:
                 popup.wait_visibility()
                 popup.grab_set()
         except tk.TclError as e:
-            # Si grab_set échoue, on peut ignorer ou gérer autrement (par exemple, désactiver la fenêtre principale manuellement)
             print(f"Erreur lors de grab_set: {e}")
 
-    def select_file(self, attachment_path_var, file_label):
-        file_path = filedialog.askopenfilename()
-        if file_path:
-            attachment_path_var.set(file_path)
-            file_label.config(text=os.path.basename(file_path))
+    def associate_file_popup(self, library_file_id_var, file_title_var):
+        select_window = tk.Toplevel(self.parent)
+        select_window.title("Sélectionner une pièce")
+        select_window.geometry("800x600")
+        select_window.transient(self.parent)
+        select_window.grab_set()
+
+        paned_window = ttk.PanedWindow(select_window, orient=tk.HORIZONTAL)
+        paned_window.pack(fill="both", expand=True, padx=5, pady=5)
+
+        folder_frame = ttk.LabelFrame(paned_window, text="Dossiers")
+        paned_window.add(folder_frame, weight=1)
+
+        search_frame = ttk.Frame(folder_frame)
+        search_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(search_frame, text="Catégorie :").pack(side="left")
+        category_search_var = tk.StringVar()
+        category_search_entry = ttk.Entry(search_frame, textvariable=category_search_var)
+        category_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ttk.Label(search_frame, text="Projet :").pack(side="left")
+        project_search_var = tk.StringVar()
+        project_search_entry = ttk.Entry(search_frame, textvariable=project_search_var)
+        project_search_entry.pack(side="left", fill="x", expand=True)
+
+        folder_tree = ttk.Treeview(folder_frame, columns=("Year", "Category", "Project"), show="headings")
+        folder_tree.heading("Year", text="Année")
+        folder_tree.heading("Category", text="Catégorie")
+        folder_tree.heading("Project", text="Projet")
+        folder_tree.column("Year", width=100)
+        folder_tree.column("Category", width=150)
+        folder_tree.column("Project", width=200)
+        folder_tree.pack(fill="both", expand=True, padx=5, pady=5)
+
+        file_frame = ttk.LabelFrame(paned_window, text="Fichiers")
+        paned_window.add(file_frame, weight=3)
+
+        file_search_frame = ttk.Frame(file_frame)
+        file_search_frame.pack(fill="x", padx=5, pady=5)
+        ttk.Label(file_search_frame, text="Rechercher fichier :").pack(side="left")
+        file_search_var = tk.StringVar()
+        file_search_entry = ttk.Entry(file_search_frame, textvariable=file_search_var)
+        file_search_entry.pack(side="left", fill="x", expand=True)
+
+        file_tree = ttk.Treeview(file_frame, columns=("ID", "Title"), show="headings")
+        file_tree.heading("ID", text="ID")
+        file_tree.heading("Title", text="Titre")
+        file_tree.column("ID", width=50)
+        file_tree.column("Title", width=450)
+        file_tree.pack(fill="both", expand=True, padx=5, pady=5)
+
+        self.cursor_library.execute("SELECT DISTINCT year, category, project FROM library WHERE file_path != '' OR title = '[Dossier]'")
+        folder_data = self.cursor_library.fetchall()
+        for row in folder_data:
+            folder_tree.insert("", tk.END, values=row)
+
+        def filter_folders(event=None):
+            for item in folder_tree.get_children():
+                folder_tree.delete(item)
+            category_search = category_search_var.get().lower()
+            project_search = project_search_var.get().lower()
+            filtered_data = [
+                row for row in folder_data
+                if (not category_search or category_search in row[1].lower())
+                and (not project_search or project_search in row[2].lower())
+            ]
+            for row in filtered_data:
+                folder_tree.insert("", tk.END, values=row)
+
+        def load_and_filter_files(event=None):
+            for item in file_tree.get_children():
+                file_tree.delete(item)
+            selected = folder_tree.selection()
+            if not selected:
+                return
+            year, category, project = folder_tree.item(selected[0])["values"]
+            file_search = file_search_var.get().lower()
+            self.cursor_library.execute("SELECT id, title FROM library WHERE year=? AND category=? AND project=? AND file_path != ''",
+                                       (year, category, project))
+            files = self.cursor_library.fetchall()
+            filtered_files = [
+                row for row in files
+                if not file_search or file_search in row[1].lower()
+            ]
+            for row in filtered_files:
+                file_tree.insert("", tk.END, values=row)
+
+        category_search_entry.bind("<KeyRelease>", filter_folders)
+        project_search_entry.bind("<KeyRelease>", filter_folders)
+        file_search_entry.bind("<KeyRelease>", load_and_filter_files)
+        folder_tree.bind("<<TreeviewSelect>>", load_and_filter_files)
+        filter_folders()
+
+        def apply_selection():
+            file_selected = file_tree.selection()
+            if not file_selected:
+                messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce.")
+                return
+            file_id = file_tree.item(file_selected[0])["values"][0]
+            file_title = file_tree.item(file_selected[0])["values"][1]
+            library_file_id_var.set(file_id)
+            file_title_var.set(file_title)
+            select_window.destroy()
+
+        ttk.Button(select_window, text="Associer", command=apply_selection).pack(pady=5)
+        ttk.Button(select_window, text="Annuler", command=select_window.destroy).pack(pady=5)
 
     def validate_date(self, year, month, day):
         try:
@@ -532,7 +634,7 @@ class DBDesigner:
         except ValueError as e:
             return False, f"Date invalide : {str(e)}"
 
-    def add_reading_from_popup(self, meter_id, param_name, parameter_map, day, month, year, value, note, attachment_path, popup):
+    def add_reading_from_popup(self, meter_id, param_name, parameter_map, day, month, year, value, note, library_file_id, popup):
         if not (param_name and day and month and year and value):
             messagebox.showwarning("Erreur", "Remplissez tous les champs requis (paramètre, date, valeur).")
             return
@@ -557,19 +659,11 @@ class DBDesigner:
                 messagebox.showwarning("Attention", f"Valeur inférieure au minimum ({min_val}) !")
             elif max_val is not None and value > max_val:
                 messagebox.showwarning("Attention", f"Valeur dépasse le maximum ({max_val}) !")
-            # Gérer le fichier joint
-            final_attachment_path = None
-            if attachment_path:
-                self.cursor.execute("SELECT name FROM meters WHERE id=?", (meter_id,))
-                meter_name = self.cursor.fetchone()[0]
-                dest_dir = os.path.join(os.path.dirname(__file__), "..", "fichiers", year, month, meter_name)
-                os.makedirs(dest_dir, exist_ok=True)
-                dest_file = os.path.join(dest_dir, os.path.basename(attachment_path))
-                shutil.copy2(attachment_path, dest_file)
-                final_attachment_path = os.path.join("fichiers", year, month, meter_name, os.path.basename(attachment_path))
+            # Convertir library_file_id en entier ou None
+            library_file_id = int(library_file_id) if library_file_id else None
             # Enregistrer le relevé
-            self.cursor.execute("INSERT INTO readings (meter_id, parameter_id, date, value, note, attachment_path) VALUES (?, ?, ?, ?, ?, ?)",
-                               (meter_id, param_id, date, value, note, final_attachment_path))
+            self.cursor.execute("INSERT INTO readings (meter_id, parameter_id, date, value, note, library_file_id) VALUES (?, ?, ?, ?, ?, ?)",
+                               (meter_id, param_id, date, value, note, library_file_id))
             self.conn.commit()
             popup.destroy()
             messagebox.showinfo("Succès", "Relevé enregistré.")
@@ -577,6 +671,24 @@ class DBDesigner:
             messagebox.showwarning("Erreur", "La valeur doit être un nombre.")
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur : {e}")
+
+    def open_file(self, library_file_id):
+        if not library_file_id:
+            messagebox.showwarning("Erreur", "Aucun fichier associé à ouvrir.")
+            return
+        self.cursor_library.execute("SELECT file_path FROM library WHERE id=?", (library_file_id,))
+        file_path_result = self.cursor_library.fetchone()
+        if not file_path_result:
+            messagebox.showerror("Erreur", "Fichier introuvable dans la bibliothèque.")
+            return
+        file_path = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "bibliotheque", file_path_result[0]))
+        if file_path and os.path.exists(file_path):
+            try:
+                subprocess.run(['xdg-open', file_path], check=True)
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
+        else:
+            messagebox.showerror("Erreur", "Fichier introuvable.")
 
     def on_node_drag(self, event):
         if not self.dragging_node:
