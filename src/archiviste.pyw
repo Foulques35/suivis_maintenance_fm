@@ -235,7 +235,7 @@ class ArchivisteApp:
         # Audit
         self.db_designer_audit = AuditDBDesigner(self.tab1_audit, self.conn_audit)
         print("Instantiating AuditMeterReadings...")
-        self.meter_readings_audit = AuditMeterReadings(self.tab2_audit, self.conn_audit)
+        self.meter_readings_audit = AuditMeterReadings(self.tab2_audit, self.conn_audit, self.conn_library)
         print("AuditMeterReadings instantiated successfully.")
         self.meter_graphs_audit = AuditMeterGraphs(self.tab4_audit)
         self.meter_reports_audit = AuditMeterReports(self.tab3_audit, self.conn_audit, self.meter_graphs_audit)
@@ -308,10 +308,36 @@ class ArchivisteApp:
             date TEXT NOT NULL,
             value REAL NOT NULL,
             note TEXT,
-            attachment_path TEXT,
+            library_file_id INTEGER,
             FOREIGN KEY (meter_id) REFERENCES meters(id),
             FOREIGN KEY (parameter_id) REFERENCES parameters(id)
         )''')
+        # Vérifier et mettre à jour la structure de la table readings
+        cursor.execute("PRAGMA table_info(readings)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if 'attachment_path' in columns:
+            # Créer une table temporaire avec la nouvelle structure
+            cursor.execute('''CREATE TABLE readings_temp (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                meter_id INTEGER,
+                parameter_id INTEGER,
+                date TEXT NOT NULL,
+                value REAL NOT NULL,
+                note TEXT,
+                library_file_id INTEGER,
+                FOREIGN KEY (meter_id) REFERENCES meters(id),
+                FOREIGN KEY (parameter_id) REFERENCES parameters(id)
+            )''')
+            # Copier les données existantes (sans attachment_path)
+            cursor.execute('''INSERT INTO readings_temp (id, meter_id, parameter_id, date, value, note)
+                             SELECT id, meter_id, parameter_id, date, value, note FROM readings''')
+            # Supprimer l'ancienne table
+            cursor.execute('DROP TABLE readings')
+            # Renommer la table temporaire
+            cursor.execute('ALTER TABLE readings_temp RENAME TO readings')
+        elif 'library_file_id' not in columns:
+            # Ajouter library_file_id si elle n'existe pas
+            cursor.execute('ALTER TABLE readings ADD COLUMN library_file_id INTEGER')
 
     def create_tables_compteurs(self, cursor):
         cursor.execute('''CREATE TABLE IF NOT EXISTS categories (
@@ -377,7 +403,6 @@ class ArchivisteApp:
             version TEXT,
             file_path TEXT
         )''')
-        # Ajouter la table de liaison task_file_link
         cursor.execute('''CREATE TABLE IF NOT EXISTS task_file_link (
             task_id INTEGER,
             file_id INTEGER,
@@ -385,7 +410,6 @@ class ArchivisteApp:
             FOREIGN KEY (file_id) REFERENCES library(id),
             PRIMARY KEY (task_id, file_id)
         )''')
-        # Ajouter la table de liaison reading_file_link
         cursor.execute('''CREATE TABLE IF NOT EXISTS reading_file_link (
             reading_id INTEGER,
             file_id INTEGER,
@@ -404,7 +428,9 @@ class ArchivisteApp:
         self.db_designer_audit.cursor = self.conn_audit.cursor()
         self.db_designer_audit.update_ui()
         self.meter_readings_audit.conn = self.conn_audit
+        self.meter_readings_audit.conn_library = self.conn_library
         self.meter_readings_audit.cursor = self.conn_audit.cursor()
+        self.meter_readings_audit.cursor_library = self.conn_library.cursor()
         self.meter_readings_audit.load_meters_to_tree()
         self.meter_reports_audit.conn = self.conn_audit
         self.meter_reports_audit.cursor = self.conn_audit.cursor()
