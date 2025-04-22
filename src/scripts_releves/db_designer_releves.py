@@ -1,5 +1,9 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, font
+from tkinter import ttk, messagebox, filedialog
+from datetime import datetime
+import os
+import shutil
+import subprocess
 
 class Tooltip:
     def __init__(self, canvas, item_id, text):
@@ -130,7 +134,7 @@ class DBDesigner:
 
         # Bindings pour interactions
         self.canvas.bind("<Button-1>", self.on_node_click)
-        self.canvas.bind("<Double-1>", self.on_node_double_click)  # Double-clic pour déplier/replier
+        self.canvas.bind("<Double-1>", self.on_node_double_click)  # Double-clic pour déplier/replier ou ouvrir formulaire
         self.canvas.bind("<B1-Motion>", self.on_node_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_node_release)
         self.canvas.bind("<MouseWheel>", self.scroll_canvas)
@@ -219,8 +223,8 @@ class DBDesigner:
         self.level_positions = {0: 20}  # Initialiser les positions Y par niveau
         self.node_heights = {}  # Réinitialiser les hauteurs des sous-arbres
         x_pos = 20
-        text_font = font.Font(family="Arial", size=12, weight="bold")
-        meter_font = font.Font(family="Arial", size=10)
+        text_font = tk.font.Font(family="Arial", size=12, weight="bold")
+        meter_font = tk.font.Font(family="Arial", size=10)
 
         # Calculer les tailles des compteurs
         self.cursor.execute("SELECT id, name, category_id FROM meters ORDER BY name")
@@ -246,7 +250,7 @@ class DBDesigner:
         self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 1000, 1000))
 
     def calculate_subtree_height(self, cat_id):
-        text_font = font.Font(family="Arial", size=12, weight="bold")
+        text_font = tk.font.Font(family="Arial", size=12, weight="bold")
         # Calculer la hauteur du nœud de la catégorie
         self.cursor.execute("SELECT name FROM categories WHERE id=?", (cat_id,))
         name = self.cursor.fetchone()[0]
@@ -277,7 +281,7 @@ class DBDesigner:
         return total_height
 
     def draw_category_tree(self, cat_id, x_base, level):
-        text_font = font.Font(family="Arial", size=12, weight="bold")
+        text_font = tk.font.Font(family="Arial", size=12, weight="bold")
         x_pos = x_base + level * 250  # Espacement horizontal entre niveaux
 
         # Initialiser la position Y pour ce niveau si nécessaire
@@ -410,22 +414,174 @@ class DBDesigner:
         items = self.canvas.find_overlapping(x-5, y-5, x+5, y+5)
         for item in items:
             tags = self.canvas.gettags(item)
-            if tags and "cat_" in tags[0]:
-                cat_id = int(tags[0].split("_")[1])
-                # Basculer l'état déplié/replié
-                if cat_id in self.expanded_nodes:
-                    self.expanded_nodes.remove(cat_id)
-                else:
-                    self.expanded_nodes.add(cat_id)
-                self.dragging_node = None  # Annuler le drag-and-drop
-                self.update_ui()
+            if tags:
+                if "cat_" in tags[0]:
+                    cat_id = int(tags[0].split("_")[1])
+                    # Basculer l'état déplié/replié
+                    if cat_id in self.expanded_nodes:
+                        self.expanded_nodes.remove(cat_id)
+                    else:
+                        self.expanded_nodes.add(cat_id)
+                    self.dragging_node = None  # Annuler le drag-and-drop
+                    self.update_ui()
+                    return
+                elif "meter_" in tags[0]:
+                    meter_id = tags[0].split("_")[1]
+                    self.open_add_reading_window(meter_id)
+                    return
+
+    def open_add_reading_window(self, meter_id):
+        # Créer une fenêtre popup pour ajouter un relevé
+        popup = tk.Toplevel(self.parent)
+        popup.title("Ajouter un Relevé")
+        popup.transient(self.parent)
+
+        # Variables pour le formulaire
+        parameter_var = tk.StringVar()
+        day_var = tk.StringVar(value=f"{datetime.now().day:02d}")
+        month_var = tk.StringVar(value=f"{datetime.now().month:02d}")
+        year_var = tk.StringVar(value=str(datetime.now().year))
+        value_var = tk.StringVar()
+        note_var = tk.StringVar()
+        attachment_path = tk.StringVar()
+
+        # Formulaire
+        form_frame = ttk.Frame(popup)
+        form_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Compteur (affiché mais non modifiable)
+        self.cursor.execute("SELECT name FROM meters WHERE id=?", (meter_id,))
+        meter_name = self.cursor.fetchone()[0]
+        ttk.Label(form_frame, text="Compteur :").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        ttk.Label(form_frame, text=meter_name).grid(row=0, column=1, columnspan=3, padx=5, pady=5, sticky="w")
+
+        # Paramètre
+        ttk.Label(form_frame, text="Paramètre :").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        parameter_combobox = ttk.Combobox(form_frame, textvariable=parameter_var, state="readonly", width=30)
+        parameter_combobox.grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
+        # Charger les paramètres pour ce compteur
+        self.cursor.execute("SELECT id, name FROM parameters WHERE meter_id=?", (meter_id,))
+        parameters = self.cursor.fetchall()
+        param_names = [param_name for _, param_name in parameters]
+        parameter_map = {param_name: param_id for param_id, param_name in parameters}
+        parameter_combobox["values"] = param_names
+        if param_names:
+            parameter_var.set(param_names[0])
+
+        # Date
+        ttk.Label(form_frame, text="Date :").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        day_combobox = ttk.Combobox(form_frame, textvariable=day_var, values=[f"{i:02d}" for i in range(1, 32)], width=5, state="readonly")
+        day_combobox.grid(row=2, column=1, padx=5, pady=5, sticky="w")
+        month_combobox = ttk.Combobox(form_frame, textvariable=month_var, values=[f"{i:02d}" for i in range(1, 13)], width=5, state="readonly")
+        month_combobox.grid(row=2, column=2, padx=5, pady=5, sticky="w")
+        year_combobox = ttk.Combobox(form_frame, textvariable=year_var, values=[str(i) for i in range(2000, 2051)], width=7, state="readonly")
+        year_combobox.grid(row=2, column=3, padx=5, pady=5, sticky="w")
+
+        # Valeur
+        ttk.Label(form_frame, text="Valeur :").grid(row=3, column=0, padx=5, pady=5, sticky="w")
+        value_entry = ttk.Entry(form_frame, textvariable=value_var, width=30)
+        value_entry.grid(row=3, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
+
+        # Note
+        ttk.Label(form_frame, text="Note :").grid(row=4, column=0, padx=5, pady=5, sticky="w")
+        note_entry = ttk.Entry(form_frame, textvariable=note_var, width=30)
+        note_entry.grid(row=4, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
+
+        # Fichier joint
+        ttk.Label(form_frame, text="Fichier :").grid(row=5, column=0, padx=5, pady=5, sticky="w")
+        file_label = ttk.Label(form_frame, text="Aucun fichier sélectionné")
+        file_label.grid(row=5, column=1, columnspan=2, padx=5, pady=5, sticky="w")
+        ttk.Button(form_frame, text="Ajouter Fichier", command=lambda: self.select_file(attachment_path, file_label)).grid(row=5, column=3, padx=5, pady=5)
+
+        # Boutons
+        buttons_frame = ttk.Frame(popup)
+        buttons_frame.pack(fill="x", pady=10)
+        ttk.Button(buttons_frame, text="Enregistrer", command=lambda: self.add_reading_from_popup(meter_id, parameter_var.get(), parameter_map, day_var.get(), month_var.get(), year_var.get(), value_var.get(), note_var.get(), attachment_path.get(), popup)).pack(side="right", padx=5)
+        ttk.Button(buttons_frame, text="Annuler", command=popup.destroy).pack(side="right", padx=5)
+
+        # Retarder l'appel à grab_set pour s'assurer que la fenêtre est rendue
+        popup.after(100, lambda: self.set_popup_grab(popup))
+
+    def set_popup_grab(self, popup):
+        try:
+            if popup.winfo_exists():
+                popup.update_idletasks()
+                popup.wait_visibility()
+                popup.grab_set()
+        except tk.TclError as e:
+            # Si grab_set échoue, on peut ignorer ou gérer autrement (par exemple, désactiver la fenêtre principale manuellement)
+            print(f"Erreur lors de grab_set: {e}")
+
+    def select_file(self, attachment_path_var, file_label):
+        file_path = filedialog.askopenfilename()
+        if file_path:
+            attachment_path_var.set(file_path)
+            file_label.config(text=os.path.basename(file_path))
+
+    def validate_date(self, year, month, day):
+        try:
+            year, month, day = int(year), int(month), int(day)
+            if not (1 <= month <= 12):
+                return False, "Mois doit être entre 1 et 12"
+            import calendar
+            days_in_month = calendar.monthrange(year, month)[1]
+            if not (1 <= day <= days_in_month):
+                return False, f"Jour doit être entre 1 et {days_in_month}"
+            datetime(year, month, day)
+            return True, ""
+        except ValueError as e:
+            return False, f"Date invalide : {str(e)}"
+
+    def add_reading_from_popup(self, meter_id, param_name, parameter_map, day, month, year, value, note, attachment_path, popup):
+        if not (param_name and day and month and year and value):
+            messagebox.showwarning("Erreur", "Remplissez tous les champs requis (paramètre, date, valeur).")
+            return
+        is_valid, error_message = self.validate_date(year, month, day)
+        if not is_valid:
+            messagebox.showwarning("Erreur", f"Date invalide : {error_message}")
+            return
+        date = f"{year}-{month}-{day}"
+        try:
+            value = float(value)
+            param_id = parameter_map.get(param_name)
+            if not param_id:
+                messagebox.showerror("Erreur", f"Paramètre {param_name} introuvable.")
                 return
+            self.cursor.execute("SELECT target, max_value FROM parameters WHERE id=?", (param_id,))
+            result = self.cursor.fetchone()
+            if not result:
+                messagebox.showerror("Erreur", f"Paramètre {param_name} introuvable dans la base de données.")
+                return
+            min_val, max_val = result
+            if min_val is not None and value < min_val:
+                messagebox.showwarning("Attention", f"Valeur inférieure au minimum ({min_val}) !")
+            elif max_val is not None and value > max_val:
+                messagebox.showwarning("Attention", f"Valeur dépasse le maximum ({max_val}) !")
+            # Gérer le fichier joint
+            final_attachment_path = None
+            if attachment_path:
+                self.cursor.execute("SELECT name FROM meters WHERE id=?", (meter_id,))
+                meter_name = self.cursor.fetchone()[0]
+                dest_dir = os.path.join(os.path.dirname(__file__), "..", "fichiers", year, month, meter_name)
+                os.makedirs(dest_dir, exist_ok=True)
+                dest_file = os.path.join(dest_dir, os.path.basename(attachment_path))
+                shutil.copy2(attachment_path, dest_file)
+                final_attachment_path = os.path.join("fichiers", year, month, meter_name, os.path.basename(attachment_path))
+            # Enregistrer le relevé
+            self.cursor.execute("INSERT INTO readings (meter_id, parameter_id, date, value, note, attachment_path) VALUES (?, ?, ?, ?, ?, ?)",
+                               (meter_id, param_id, date, value, note, final_attachment_path))
+            self.conn.commit()
+            popup.destroy()
+            messagebox.showinfo("Succès", "Relevé enregistré.")
+        except ValueError:
+            messagebox.showwarning("Erreur", "La valeur doit être un nombre.")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur : {e}")
 
     def on_node_drag(self, event):
         if not self.dragging_node:
             return
         node_id, node_type = self.dragging_node
-        # Vérifier si le nœud existe encore dans node_positions
         if (node_id, node_type) not in self.node_positions:
             self.dragging_node = None
             return
@@ -442,13 +598,11 @@ class DBDesigner:
         if not self.dragging_node:
             return
         node_id, node_type = self.dragging_node
-        # Vérifier si le nœud existe encore dans node_positions
         if (node_id, node_type) not in self.node_positions:
             self.dragging_node = None
             return
         x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
         if node_type == "meter":
-            # Trouver la catégorie la plus proche
             closest_cat = None
             min_dist = float("inf")
             for (cat_id, cat_type), (cx, cy, cw, ch) in self.node_positions.items():
