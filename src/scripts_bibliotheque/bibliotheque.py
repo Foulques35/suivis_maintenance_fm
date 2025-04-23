@@ -29,6 +29,9 @@ class LibraryManager:
         self.init_nomenclatures_file()
         self.init_sites_file()
 
+        # Nettoyer les chemins dans la base de données au démarrage
+        self.clean_file_paths()
+
         # Variables pour les filtres du Treeview 1
         self.year_filter_var = tk.StringVar()
         self.category_filter_var = tk.StringVar()
@@ -160,6 +163,8 @@ class LibraryManager:
         ttk.Button(file_button_frame, text="Vider formulaire", style="Clear.TButton", command=self.clear_file_form).pack(side="left", padx=5)
         ttk.Button(file_button_frame, text="Supprimer pièce", style="Delete.TButton", command=self.delete_file).pack(side="left", padx=5)
         ttk.Button(file_button_frame, text="Ouvrir pièce", style="Add.TButton", command=self.open_file).pack(side="left", padx=5)
+        ttk.Button(file_button_frame, text="Ouvrir l'emplacement", style="Add.TButton", command=self.open_file_explorer).pack(side="left", padx=5)
+        ttk.Button(file_button_frame, text="Vérifier chemins", style="Modify.TButton", command=self.verify_and_fix_file_paths).pack(side="left", padx=5)
 
         # Recherche pour le Treeview 2
         search_frame = ttk.Frame(right_frame)
@@ -373,6 +378,47 @@ class LibraryManager:
             self.cursor.execute("ALTER TABLE library ADD COLUMN notes TEXT")
         self.conn.commit()
 
+    def clean_file_paths(self):
+        """Nettoie les chemins dans la base de données en supprimant les redondances."""
+        self.cursor.execute("SELECT id, year, category, project, title, file_path FROM library WHERE file_path != ''")
+        files = self.cursor.fetchall()
+        for file_id, year, category, project, title, file_path in files:
+            # Construire le chemin attendu : year/category/project/title
+            expected_path = os.path.join(str(year), category, project, title)
+            expected_path = expected_path.replace('\\', '/')
+
+            # Vérifier si le chemin stocké contient une redondance
+            if file_path != expected_path:
+                print(f"Chemin incorrect détecté pour l'ID {file_id} : {file_path}")
+                print(f"Chemin corrigé : {expected_path}")
+                self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_path, file_id))
+        self.conn.commit()
+
+    def verify_and_fix_file_paths(self):
+        """Vérifie l'existence des fichiers et corrige les chemins dans la base si nécessaire."""
+        self.cursor.execute("SELECT id, year, category, project, title, file_path FROM library WHERE file_path != ''")
+        files = self.cursor.fetchall()
+        corrected = 0
+        missing = 0
+        for file_id, year, category, project, title, file_path in files:
+            # Construire le chemin attendu
+            expected_relative_path = os.path.join(str(year), category, project, title)
+            expected_relative_path = expected_relative_path.replace('\\', '/')
+            expected_full_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
+
+            # Vérifier si le fichier existe au chemin attendu
+            if os.path.exists(expected_full_path):
+                if file_path != expected_relative_path:
+                    print(f"Corrige le chemin pour l'ID {file_id} : {file_path} -> {expected_relative_path}")
+                    self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_relative_path, file_id))
+                    corrected += 1
+            else:
+                print(f"Fichier manquant pour l'ID {file_id} : {expected_full_path}")
+                missing += 1
+
+        self.conn.commit()
+        messagebox.showinfo("Vérification terminée", f"Chemins corrigés : {corrected}\nFichiers manquants : {missing}")
+
     def toggle_file_fields(self):
         state = "disabled" if self.keep_name_var.get() else "normal"
         self.site_entry.configure(state=state)
@@ -466,8 +512,9 @@ class LibraryManager:
         self.cursor.execute("SELECT id, file_path FROM library WHERE year=? AND category=? AND project=? AND file_path != ''",
                            (new_year, new_category, new_project))
         for file_id, file_path in self.cursor.fetchall():
-            old_relative_path = file_path
-            new_relative_path = os.path.join(str(new_year), new_category, new_project, os.path.basename(file_path))
+            file_name = os.path.basename(file_path)
+            new_relative_path = os.path.join(str(new_year), new_category, new_project, file_name)
+            new_relative_path = new_relative_path.replace('\\', '/')
             self.cursor.execute("UPDATE library SET file_path=? WHERE id=?", (new_relative_path, file_id))
         
         self.conn.commit()
@@ -601,7 +648,9 @@ class LibraryManager:
                 return
             title = f"{year}-{site}-{nomenclature}-{emetteur}-{objet}-{version}{os.path.splitext(file_path)[1]}"
 
+        # Construire le chemin de destination
         relative_dest_dir = os.path.join(str(year), category, project)
+        relative_dest_dir = relative_dest_dir.replace('\\', '/')
         dest_dir = os.path.normpath(os.path.join(self.files_dir, relative_dest_dir))
         try:
             os.makedirs(dest_dir, exist_ok=True)
@@ -609,6 +658,7 @@ class LibraryManager:
             messagebox.showerror("Erreur", f"Impossible de créer le dossier de destination : {e}")
             return
         relative_dest_path = os.path.join(relative_dest_dir, title)
+        relative_dest_path = relative_dest_path.replace('\\', '/')
         dest_path = os.path.normpath(os.path.join(self.files_dir, relative_dest_path))
 
         if os.path.exists(dest_path):
@@ -673,7 +723,9 @@ class LibraryManager:
         old_relative_path = self.cursor.fetchone()[0]
         old_path = os.path.normpath(os.path.join(self.files_dir, old_relative_path))
 
+        # Construire le nouveau chemin
         relative_dest_dir = os.path.join(str(year), category, project)
+        relative_dest_dir = relative_dest_dir.replace('\\', '/')
         dest_dir = os.path.normpath(os.path.join(self.files_dir, relative_dest_dir))
         try:
             os.makedirs(dest_dir, exist_ok=True)
@@ -681,6 +733,7 @@ class LibraryManager:
             messagebox.showerror("Erreur", f"Impossible de créer le dossier de destination : {e}")
             return
         new_relative_path = os.path.join(relative_dest_dir, title)
+        new_relative_path = new_relative_path.replace('\\', '/')
         new_path = os.path.normpath(os.path.join(self.files_dir, new_relative_path))
 
         if new_path != old_path:
@@ -735,19 +788,99 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce à ouvrir.")
             return
         file_id = self.file_tree.item(selected[0])["values"][0]
-        self.cursor.execute("SELECT file_path FROM library WHERE id=?", (file_id,))
-        relative_path = self.cursor.fetchone()[0]
-        file_path = os.path.normpath(os.path.join(self.files_dir, relative_path))
-        if not os.path.exists(file_path):
-            messagebox.showerror("Erreur", "Le fichier n'existe plus.")
+        # Récupérer les informations de l'entrée pour reconstruire le chemin
+        self.cursor.execute("SELECT year, category, project, title, file_path FROM library WHERE id=?", (file_id,))
+        result = self.cursor.fetchone()
+        if not result:
+            messagebox.showerror("Erreur", f"Aucune entrée trouvée pour l'ID {file_id}.")
             return
+        
+        year, category, project, title, stored_file_path = result
+
+        # Construire le chemin attendu en utilisant year, category, project, et title
+        expected_relative_path = os.path.join(str(year), category, project, title)
+        expected_relative_path = expected_relative_path.replace('\\', '/')
+        expected_file_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
+
+        # Vérifier si le fichier existe avec le chemin reconstruit
+        if os.path.exists(expected_file_path):
+            file_path = expected_file_path
+            print(f"Ouverture du fichier avec le chemin reconstruit : {file_path}")
+        else:
+            # Si le fichier n'existe pas au chemin attendu, essayer le chemin stocké
+            stored_file_path = stored_file_path.replace('\\', '/')
+            file_path = os.path.normpath(os.path.join(self.files_dir, stored_file_path))
+            print(f"Fichier non trouvé au chemin reconstruit, tentative avec le chemin stocké : {file_path}")
+            if not os.path.exists(file_path):
+                messagebox.showerror("Erreur", f"Le fichier n'existe pas :\nChemin attendu : {expected_file_path}\nChemin stocké : {file_path}\nVérifiez si le fichier a été déplacé ou supprimé.")
+                return
+
+        # Vérifier les permissions de lecture
+        if not os.access(file_path, os.R_OK):
+            messagebox.showerror("Erreur", f"Le fichier '{file_path}' n'a pas les permissions de lecture.")
+            return
+
         try:
             if platform.system() == "Windows":
                 os.startfile(file_path)
+            elif platform.system() == "Linux":
+                result = subprocess.run(
+                    ["xdg-open", file_path],
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+                if result.stderr:
+                    messagebox.showwarning("Avertissement", f"Erreur lors de l'ouverture avec xdg-open : {result.stderr}")
             else:
-                subprocess.run(["xdg-open", file_path], check=True)
+                subprocess.run(["open", file_path], check=True)
+        except subprocess.CalledProcessError as e:
+            messagebox.showerror("Erreur", f"Échec de l'ouverture du fichier : {e.stderr}")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {e}")
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
+
+    def open_file_explorer(self):
+        selected = self.file_tree.selection()
+        if not selected:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce pour ouvrir son emplacement.")
+            return
+        file_id = self.file_tree.item(selected[0])["values"][0]
+        self.cursor.execute("SELECT year, category, project, title, file_path FROM library WHERE id=?", (file_id,))
+        result = self.cursor.fetchone()
+        if not result:
+            messagebox.showerror("Erreur", f"Aucune entrée trouvée pour l'ID {file_id}.")
+            return
+        
+        year, category, project, title, stored_file_path = result
+
+        # Construire le chemin attendu
+        expected_relative_path = os.path.join(str(year), category, project, title)
+        expected_relative_path = expected_relative_path.replace('\\', '/')
+        expected_file_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
+
+        # Vérifier si le fichier existe au chemin reconstruit
+        if os.path.exists(expected_file_path):
+            file_path = expected_file_path
+        else:
+            # Sinon, utiliser le chemin stocké
+            stored_file_path = stored_file_path.replace('\\', '/')
+            file_path = os.path.normpath(os.path.join(self.files_dir, stored_file_path))
+            if not os.path.exists(file_path):
+                messagebox.showerror("Erreur", f"Le fichier n'existe pas pour ouvrir son emplacement :\nChemin attendu : {expected_file_path}\nChemin stocké : {file_path}")
+                return
+
+        # Obtenir le dossier parent du fichier
+        folder_path = os.path.dirname(file_path)
+
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(["explorer", folder_path])
+            elif platform.system() == "Linux":
+                subprocess.run(["xdg-open", folder_path])
+            else:
+                subprocess.run(["open", folder_path])
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir l'explorateur de fichiers : {str(e)}")
 
     def load_file_to_form(self, event):
         selected = self.file_tree.selection()
