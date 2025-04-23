@@ -196,7 +196,7 @@ class LibraryManager:
                 with open(self.nomenclatures_file, "w", encoding="utf-8") as f:
                     json.dump(default_nomenclatures, f, indent=4)
             except Exception as e:
-                print(f"Erreur lors de la création de nomenclatures.json : {e}")
+                messagebox.showerror("Erreur", f"Impossible de créer nomenclatures.json : {e}")
 
     def init_sites_file(self):
         if not os.path.exists(self.sites_file):
@@ -209,7 +209,7 @@ class LibraryManager:
                 with open(self.sites_file, "w", encoding="utf-8") as f:
                     json.dump(default_sites, f, indent=4)
             except Exception as e:
-                print(f"Erreur lors de la création de sites.json : {e}")
+                messagebox.showerror("Erreur", f"Impossible de créer sites.json : {e}")
 
     def show_nomenclatures(self):
         nomenclatures_window = tk.Toplevel(self.parent)
@@ -242,7 +242,6 @@ class LibraryManager:
 
         def filter_nomenclatures(*args):
             search_term = search_var.get().lower()
-            print(f"Filtrage nomenclatures avec terme : {search_term}")
             for item in tree.get_children():
                 tree.delete(item)
             for nomenclature in nomenclatures:
@@ -304,7 +303,6 @@ class LibraryManager:
 
         def filter_sites(*args):
             search_term = search_var.get().lower()
-            print(f"Filtrage sites avec terme : {search_term}")
             for item in tree.get_children():
                 tree.delete(item)
             for site in sites:
@@ -423,10 +421,8 @@ class LibraryManager:
         self.clear_folder_form()
 
     def modify_folder(self):
-        print("Début de modify_folder")
         if not self.current_selected_folder:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier à modifier.")
-            print("Aucune sélection trouvée")
             return
 
         new_year = self.folder_year_var.get()
@@ -434,19 +430,14 @@ class LibraryManager:
         new_project = self.folder_project_var.get()
         new_notes = self.folder_notes_var.get()
 
-        print(f"Nouvelles valeurs : year={new_year}, category={new_category}, project={new_project}, notes={new_notes}")
-
         if not all([new_year, new_category, new_project]):
             messagebox.showwarning("Erreur", "Les champs Année, Catégorie et Projet doivent être remplis.")
-            print("Champs requis manquants")
             return
 
         old_year, old_category, old_project, old_notes = self.current_selected_folder
-        print(f"Anciennes valeurs : year={old_year}, category={old_category}, project={old_project}, notes={old_notes}")
 
         if (old_year, old_category, old_project, old_notes) == (new_year, new_category, new_project, new_notes):
             messagebox.showinfo("Information", "Aucune modification détectée.")
-            print("Aucune modification détectée")
             return
 
         # Vérifier si le nouveau dossier existe déjà (sauf si c'est le même dossier)
@@ -454,24 +445,19 @@ class LibraryManager:
                            (new_year, new_category, new_project, old_year, old_category, old_project))
         if self.cursor.fetchone():
             messagebox.showerror("Erreur", "Ce dossier existe déjà.")
-            print("Dossier existant détecté")
             return
 
         # Déplacer le dossier physique
         old_folder_path = os.path.normpath(os.path.join(self.files_dir, str(old_year), old_category, old_project))
         new_folder_path = os.path.normpath(os.path.join(self.files_dir, str(new_year), new_category, new_project))
-        print(f"Déplacement de {old_folder_path} vers {new_folder_path}")
         if os.path.exists(old_folder_path):
             try:
                 shutil.move(old_folder_path, new_folder_path)
-                print("Déplacement réussi")
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible de déplacer le dossier : {e}")
-                print(f"Erreur lors du déplacement : {e}")
                 return
 
         # Mettre à jour la base de données
-        print("Mise à jour de la base de données")
         self.cursor.execute('''UPDATE library SET year=?, category=?, project=?, notes=? 
                             WHERE year=? AND category=? AND project=?''',
                            (new_year, new_category, new_project, new_notes, old_year, old_category, old_project))
@@ -485,12 +471,10 @@ class LibraryManager:
             self.cursor.execute("UPDATE library SET file_path=? WHERE id=?", (new_relative_path, file_id))
         
         self.conn.commit()
-        print("Base de données mise à jour avec succès")
         
         self.refresh_folder_list()
         self.clear_folder_form()
         self.load_files(None)
-        print("Fin de modify_folder")
 
     def delete_folder(self):
         selected = self.folder_tree.selection()
@@ -498,7 +482,12 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier à supprimer.")
             return
         year, category, project, notes = self.folder_tree.item(selected[0])["values"]
-        if messagebox.askyesno("Confirmation", f"Supprimer le dossier {year}/{category}/{project} et toutes ses pièces ?"):
+        
+        # Compter le nombre de pièces dans le dossier
+        self.cursor.execute("SELECT COUNT(*) FROM library WHERE year=? AND category=? AND project=? AND file_path != ''", (year, category, project))
+        num_files = self.cursor.fetchone()[0]
+        
+        if messagebox.askyesno("Confirmation", f"Supprimer le dossier {year}/{category}/{project} et ses {num_files} pièce(s) ?"):
             folder_path = os.path.normpath(os.path.join(self.files_dir, str(year), category, project))
             self.cursor.execute("SELECT file_path FROM library WHERE year=? AND category=? AND project=?", (year, category, project))
             for row in self.cursor.fetchall():
@@ -509,14 +498,15 @@ class LibraryManager:
                         if os.path.exists(full_path):
                             os.remove(full_path)
                     except Exception as e:
-                        print(f"Erreur lors de la suppression du fichier : {e}")
+                        pass
             try:
                 if os.path.exists(folder_path):
                     shutil.rmtree(folder_path)
             except Exception as e:
-                print(f"Erreur lors de la suppression du dossier : {e}")
+                pass
             self.cursor.execute("DELETE FROM library WHERE year=? AND category=? AND project=?", (year, category, project))
             
+            # Vérifier si la catégorie est vide
             self.cursor.execute("SELECT 1 FROM library WHERE category=?", (category,))
             if not self.cursor.fetchone():
                 messagebox.showinfo("Information", f"La catégorie '{category}' est vide et a été supprimée.")
@@ -526,7 +516,7 @@ class LibraryManager:
                         if os.path.exists(category_path):
                             shutil.rmtree(category_path)
                     except Exception as e:
-                        print(f"Erreur lors de la suppression du dossier de catégorie : {e}")
+                        pass
             
             self.conn.commit()
             self.refresh_folder_list()
@@ -538,7 +528,14 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier pour supprimer sa catégorie.")
             return
         _, category, _, _ = self.current_selected_folder
-        if messagebox.askyesno("Confirmation", f"Supprimer la catégorie '{category}' et tous ses dossiers et pièces ?"):
+        
+        # Compter le nombre de dossiers et de pièces dans la catégorie
+        self.cursor.execute("SELECT COUNT(DISTINCT year, project) FROM library WHERE category=?", (category,))
+        num_folders = self.cursor.fetchone()[0]
+        self.cursor.execute("SELECT COUNT(*) FROM library WHERE category=? AND file_path != ''", (category,))
+        num_files = self.cursor.fetchone()[0]
+
+        if messagebox.askyesno("Confirmation", f"Supprimer la catégorie '{category}' ? Cela supprimera {num_folders} dossier(s) et {num_files} pièce(s)."):
             self.cursor.execute("SELECT DISTINCT year, project FROM library WHERE category=?", (category,))
             for year, project in self.cursor.fetchall():
                 folder_path = os.path.normpath(os.path.join(self.files_dir, str(year), category, project))
@@ -551,19 +548,19 @@ class LibraryManager:
                             if os.path.exists(full_path):
                                 os.remove(full_path)
                         except Exception as e:
-                            print(f"Erreur lors de la suppression du fichier : {e}")
+                            pass
                 try:
                     if os.path.exists(folder_path):
                         shutil.rmtree(folder_path)
                 except Exception as e:
-                    print(f"Erreur lors de la suppression du dossier : {e}")
+                    pass
             for year_dir in os.listdir(self.files_dir):
                 category_path = os.path.normpath(os.path.join(self.files_dir, year_dir, category))
                 try:
                     if os.path.exists(category_path):
                         shutil.rmtree(category_path)
                 except Exception as e:
-                    print(f"Erreur lors de la suppression du dossier de catégorie : {e}")
+                    pass
             self.cursor.execute("DELETE FROM library WHERE category=?", (category,))
             self.conn.commit()
             self.refresh_folder_list()
@@ -713,8 +710,10 @@ class LibraryManager:
         if not selected:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce à supprimer.")
             return
-        if messagebox.askyesno("Confirmation", "Supprimer cette pièce de la bibliothèque ?"):
-            file_id = self.file_tree.item(selected[0])["values"][0]
+        file_id = self.file_tree.item(selected[0])["values"][0]
+        self.cursor.execute("SELECT title FROM library WHERE id=?", (file_id,))
+        file_title = self.cursor.fetchone()[0]
+        if messagebox.askyesno("Confirmation", f"Supprimer la pièce '{file_title}' de la bibliothèque ?"):
             self.cursor.execute("SELECT file_path FROM library WHERE id=?", (file_id,))
             relative_path = self.cursor.fetchone()[0]
             file_path = os.path.normpath(os.path.join(self.files_dir, relative_path))
@@ -722,7 +721,7 @@ class LibraryManager:
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except Exception as e:
-                print(f"Erreur lors de la suppression du fichier : {e}")
+                pass
             self.cursor.execute("DELETE FROM library WHERE id=?", (file_id,))
             self.conn.commit()
             self.refresh_folder_list()
@@ -805,13 +804,11 @@ class LibraryManager:
         query = "SELECT DISTINCT year, category, project, notes FROM library WHERE file_path != '' OR title = '[Dossier]'"
         self.cursor.execute(query)
         self.all_folders = self.cursor.fetchall()
-        print(f"Données chargées : {self.all_folders}")
 
         # Filtrer les données en mémoire avec recherche partielle
         year_filter = self.year_filter_var.get().strip().lower()
         category_filter = self.category_filter_var.get().strip().lower()
         project_filter = self.project_filter_var.get().strip().lower()
-        print(f"Filtres appliqués : year={year_filter}, category={category_filter}, project={project_filter}")
 
         filtered_folders = [
             row for row in self.all_folders
@@ -819,7 +816,6 @@ class LibraryManager:
             and (not category_filter or category_filter in str(row[1]).lower())
             and (not project_filter or project_filter in str(row[2]).lower())
         ]
-        print(f"Données filtrées : {filtered_folders}")
 
         # Vider le Treeview
         for item in self.folder_tree.get_children():
@@ -839,7 +835,6 @@ class LibraryManager:
             normalized_row = (str(row[0]), str(row[1]), str(row[2]), str(row[3] or ""))
             item = self.folder_tree.insert("", tk.END, values=normalized_row)
             items.append((item, normalized_row))
-            print(f"Insertion dans le Treeview : {normalized_row}")
 
         # Restaurer la sélection
         if selected_values:
@@ -860,7 +855,6 @@ class LibraryManager:
                     self.folder_tree.see(first_item)
 
     def filter_folders(self, *args):
-        print("Appel de filter_folders")
         self.refresh_folder_list()
 
     def load_files(self, event):
@@ -883,7 +877,6 @@ class LibraryManager:
         if not self.current_folder:
             return
         search_term = self.search_var.get().lower()
-        print(f"Filtrage pièces avec terme : {search_term}")
         year, category, project, notes = self.current_folder
         query = '''SELECT id, title FROM library 
                    WHERE year=? AND category=? AND project=? AND file_path != ''
