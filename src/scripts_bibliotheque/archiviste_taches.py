@@ -286,6 +286,33 @@ class TaskManager:
             messagebox.showwarning("Erreur", "La date d'échéance doit être au format YYYY-MM-DD !")
             return
 
+        # Si une tâche est sélectionnée, demander si copier sous-tâches et fichiers
+        copy_subtasks = False
+        copy_files = False
+        if self.current_task_id:
+            copy_window = tk.Toplevel(self.parent)
+            copy_window.title("Copier les éléments")
+            copy_window.geometry("300x150")
+            copy_window.transient(self.parent)
+            copy_window.grab_set()
+
+            ttk.Label(copy_window, text="Copier les sous-tâches ?").pack(pady=5)
+            copy_subtasks_var = tk.BooleanVar()
+            ttk.Checkbutton(copy_window, variable=copy_subtasks_var).pack()
+
+            ttk.Label(copy_window, text="Copier les pièces associées ?").pack(pady=5)
+            copy_files_var = tk.BooleanVar()
+            ttk.Checkbutton(copy_window, variable=copy_files_var).pack()
+
+            def confirm():
+                nonlocal copy_subtasks, copy_files
+                copy_subtasks = copy_subtasks_var.get()
+                copy_files = copy_files_var.get()
+                copy_window.destroy()
+
+            ttk.Button(copy_window, text="Confirmer", command=confirm).pack(pady=5)
+            self.parent.wait_window(copy_window)
+
         self.cursor.execute("INSERT INTO tasks (title, description, due_date, priority, status, recurrence) VALUES (?, ?, ?, ?, ?, ?)",
                            (title, description, due_date, priority, status, recurrence))
         self.conn.commit()
@@ -293,9 +320,8 @@ class TaskManager:
         self.cursor.execute("SELECT last_insert_rowid()")
         new_task_id = self.cursor.fetchone()[0]
 
-        # Si une tâche est sélectionnée, copier ses sous-tâches et liens de fichiers
-        if self.current_task_id:
-            # Copier les sous-tâches
+        # Copier les sous-tâches et liens de fichiers si demandé
+        if self.current_task_id and copy_subtasks:
             self.cursor.execute("SELECT title FROM subtasks WHERE task_id=?", (self.current_task_id,))
             subtasks = self.cursor.fetchall()
             for subtask in subtasks:
@@ -303,7 +329,7 @@ class TaskManager:
                 self.cursor.execute("INSERT INTO subtasks (task_id, title, status) VALUES (?, ?, 'En cours')",
                                    (new_task_id, subtask_title))
 
-            # Copier les liens de fichiers
+        if self.current_task_id and copy_files:
             self.cursor_library.execute("SELECT file_id FROM task_file_link WHERE task_id=?", (self.current_task_id,))
             file_links = self.cursor_library.fetchall()
             for link in file_links:
@@ -454,6 +480,7 @@ class TaskManager:
                                (self.current_task_id, title))
             self.conn.commit()
             self.refresh_subtasks()
+            self.refresh_task_list()
             self.parent.after(100, self.refresh_calendar)
             subtask_window.destroy()
 
@@ -472,6 +499,7 @@ class TaskManager:
         self.cursor.execute("UPDATE subtasks SET status=? WHERE id=?", (new_status, subtask_id))
         self.conn.commit()
         self.refresh_subtasks()
+        self.refresh_task_list()
         self.parent.after(100, self.refresh_calendar)
 
     def delete_subtask(self):
@@ -484,6 +512,7 @@ class TaskManager:
             self.cursor.execute("DELETE FROM subtasks WHERE id=?", (subtask_id,))
             self.conn.commit()
             self.refresh_subtasks()
+            self.refresh_task_list()
             self.parent.after(100, self.refresh_calendar)
 
     def modify_subtask(self):
@@ -509,10 +538,11 @@ class TaskManager:
             new_title = title_var.get().strip()
             if not new_title:
                 messagebox.showwarning("Erreur", "Le titre de la sous-tâche est obligatoire.")
-                return
+            return
             self.cursor.execute("UPDATE subtasks SET title=? WHERE id=?", (new_title, subtask_id))
             self.conn.commit()
             self.refresh_subtasks()
+            self.refresh_task_list()
             self.parent.after(100, self.refresh_calendar)
             subtask_window.destroy()
 
@@ -757,7 +787,7 @@ class TaskManager:
 
             # Copier les sous-tâches avec le statut "En cours"
             self.cursor.execute("SELECT title FROM subtasks WHERE task_id=?", (task_id,))
-            subtasks = self.cursor.fetchall()
+            subtask = self.cursor.fetchall()
             for subtask in subtasks:
                 subtask_title = subtask[0]
                 self.cursor.execute("INSERT INTO subtasks (task_id, title, status) VALUES (?, ?, 'En cours')",
