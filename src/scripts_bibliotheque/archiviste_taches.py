@@ -27,12 +27,12 @@ class TaskManager:
         style = ttk.Style()
         style.configure("Create.TButton", background="#90EE90", foreground="black")  # Vert clair
         style.configure("Modify.TButton", background="#FFFFE0", foreground="black")  # Jaune clair
-        style.configure("Delete.TButton", background="#FF0000", foreground="#FFFFFF")  # Rouge
+        style.configure("Delete.TButton", background="#FF0000", foreground="black")  # Rouge
         style.configure("Complete.TButton", background="#32CD32", foreground="black")  # Vert
         style.configure("Associate.TButton", background="#FFD700", foreground="black")  # Jaune
         style.configure("Open.TButton", background="#00CED1", foreground="black")  # Turquoise
         style.configure("Dissociate.TButton", background="#FF6347", foreground="black")  # Rouge tomate
-        style.configure("MassDelete.TButton", background="#FF0000", foreground="#FFFFFF")  # Rouge pour la suppression en masse
+        style.configure("MassDelete.TButton", background="#FF0000", foreground="black")  # Rouge pour la suppression en masse
         style.configure("AddSubtask.TButton", background="#90EE90", foreground="black")  # Vert clair
         style.configure("ToggleSubtask.TButton", background="#32CD32", foreground="black")  # Vert
         style.configure("DeleteSubtask.TButton", background="#FF6347", foreground="black")  # Rouge tomate
@@ -228,7 +228,6 @@ class TaskManager:
             self.cursor.execute("ALTER TABLE tasks ADD COLUMN priority TEXT DEFAULT 'Moyenne'")
         if 'recurrence' not in columns:
             self.cursor.execute("ALTER TABLE tasks ADD COLUMN recurrence TEXT DEFAULT 'Aucune'")
-        # Remplacer le statut "Reportée" par "En cours" dans la base de données
         self.cursor.execute("UPDATE tasks SET status='En cours' WHERE status='Reportée'")
         self.conn.commit()
 
@@ -240,14 +239,13 @@ class TaskManager:
                 self.exclude_saturday = config.get("tasks_exclude_saturday", False)
                 self.exclude_sunday = config.get("tasks_exclude_sunday", False)
                 self.status_filter = config.get("tasks_status_filter", "Tous")
-                # Ajuster le filtre de statut si nécessaire
                 if self.status_filter not in ["Tous", "En cours", "Terminé"]:
                     self.status_filter = "Tous"
             else:
                 self.exclude_saturday = False
                 self.exclude_sunday = False
                 self.status_filter = "Tous"
-        except Exception as e:
+        except Exception:
             self.exclude_saturday = False
             self.exclude_sunday = False
             self.status_filter = "Tous"
@@ -261,7 +259,7 @@ class TaskManager:
             }
             with open(self.config_file, "w") as f:
                 json.dump(config, f, indent=4)
-        except Exception as e:
+        except Exception:
             pass
 
     def save_status_filter(self, event=None):
@@ -273,7 +271,7 @@ class TaskManager:
         description = self.description_text.get("1.0", tk.END).strip()
         due_date = self.due_date_var.get()
         priority = self.priority_var.get()
-        status = "En cours"  # Forcer le statut à "En cours" pour une nouvelle tâche
+        status = "En cours"
         recurrence = self.recurrence_var.get()
 
         if not title or not due_date:
@@ -286,7 +284,6 @@ class TaskManager:
             messagebox.showwarning("Erreur", "La date d'échéance doit être au format YYYY-MM-DD !")
             return
 
-        # Si une tâche est sélectionnée, demander si copier sous-tâches et fichiers
         copy_subtasks = False
         copy_files = False
         if self.current_task_id:
@@ -320,7 +317,6 @@ class TaskManager:
         self.cursor.execute("SELECT last_insert_rowid()")
         new_task_id = self.cursor.fetchone()[0]
 
-        # Copier les sous-tâches et liens de fichiers si demandé
         if self.current_task_id and copy_subtasks:
             self.cursor.execute("SELECT title FROM subtasks WHERE task_id=?", (self.current_task_id,))
             subtasks = self.cursor.fetchall()
@@ -404,8 +400,22 @@ class TaskManager:
         if not task:
             return
 
+        # Vérifier si toutes les sous-tâches sont terminées
+        self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (self.current_task_id,))
+        total_subtasks = self.cursor.fetchone()[0]
+        self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=? AND status='Terminé'", (self.current_task_id,))
+        completed_subtasks = self.cursor.fetchone()[0]
+
+        if total_subtasks > 0 and completed_subtasks < total_subtasks:
+            if not messagebox.askyesno("Confirmation", "Certaines sous-tâches ne sont pas terminées. Voulez-vous marquer la tâche comme terminée ?"):
+                return
+            # Marquer toutes les sous-tâches comme terminées
+            self.cursor.execute("UPDATE subtasks SET status='Terminé' WHERE task_id=?", (self.current_task_id,))
+            self.conn.commit()
+
         title, description, due_date, priority, recurrence = task
         self.cursor.execute("UPDATE tasks SET status='Terminé' WHERE id=?", (self.current_task_id,))
+        self.conn.commit()
 
         if recurrence != "Aucune":
             new_due_date = self.calculate_next_due_date(due_date, recurrence)
@@ -432,6 +442,7 @@ class TaskManager:
             self.conn_library.commit()
 
         self.clear_task_form()
+        self.refresh_subtasks()
         self.refresh_task_list()
         self.parent.after(100, self.refresh_calendar)
 
@@ -538,7 +549,7 @@ class TaskManager:
             new_title = title_var.get().strip()
             if not new_title:
                 messagebox.showwarning("Erreur", "Le titre de la sous-tâche est obligatoire.")
-            return
+                return
             self.cursor.execute("UPDATE subtasks SET title=? WHERE id=?", (new_title, subtask_id))
             self.conn.commit()
             self.refresh_subtasks()
@@ -578,54 +589,53 @@ class TaskManager:
             self.cursor.execute("SELECT status FROM tasks WHERE id=?", (self.current_task_id,))
             task_status = self.cursor.fetchone()[0]
             if completed_subtasks == total_subtasks and task_status != "Terminé":
-                self.mark_completed()
-            elif in_progress_subtasks == total_subtasks and task_status != "En cours":
+                self.cursor.execute("UPDATE tasks SET status='Terminé' WHERE id=?", (self.current_task_id,))
+                self.conn.commit()
+                self.refresh_task_list()
+            elif in_progress_subtasks > 0 and task_status == "Terminé":
                 self.cursor.execute("UPDATE tasks SET status='En cours' WHERE id=?", (self.current_task_id,))
                 self.conn.commit()
                 self.status_var.set("En cours")
                 self.refresh_task_list()
-                self.parent.after(100, self.refresh_calendar)
         else:
             self.progress_bar["value"] = 0
             self.progress_label.config(text="Progression: 0%")
             self.delete_subtask_btn.config(state="disabled")
             self.modify_subtask_btn.config(state="disabled")
+            self.cursor.execute("SELECT status FROM tasks WHERE id=?", (self.current_task_id,))
+            task_status = self.cursor.fetchone()[0]
+            if task_status == "Terminé":
+                self.progress_bar["value"] = 100
+                self.progress_label.config(text="Progression: 100%")
 
     def show_task_calendar(self):
-        # Créer une fenêtre modale pour la vue planning avec une taille agrandie
         self.calendar_window = tk.Toplevel(self.parent)
         self.calendar_window.title("Vue Planning des Tâches")
-        self.calendar_window.geometry("1280x800")  # Taille ajustée à 1280x800
+        self.calendar_window.geometry("1280x800")
         self.calendar_window.resizable(True, True)
         self.calendar_window.transient(self.parent)
         self.calendar_window.grab_set()
 
-        # Créer un PanedWindow pour diviser la fenêtre en deux : calendrier à gauche, tâches à droite
         paned_window = ttk.PanedWindow(self.calendar_window, orient=tk.HORIZONTAL)
         paned_window.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Volet gauche : Calendrier
         calendar_frame = ttk.LabelFrame(paned_window, text="Calendrier")
         paned_window.add(calendar_frame, weight=1)
 
         self.calendar = Calendar(calendar_frame, selectmode="day", date_pattern="yyyy-mm-dd")
         self.calendar.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Volet droit : Tâches et sous-tâches
         tasks_frame = ttk.LabelFrame(paned_window, text="Tâches pour la date sélectionnée")
         paned_window.add(tasks_frame, weight=1)
 
-        # Forcer la répartition 50%/50% en définissant la position de la séparation
-        self.calendar_window.update_idletasks()  # Mettre à jour la géométrie pour obtenir les dimensions réelles
-        window_width = 1280  # Largeur totale de la fenêtre
-        sash_position = window_width // 2  # Position à 50% (640 pixels)
+        self.calendar_window.update_idletasks()
+        window_width = 1280
+        sash_position = window_width // 2
         paned_window.sashpos(0, sash_position)
 
-        # Sous-frame vertical pour les tâches et sous-tâches
         tasks_subframe = ttk.PanedWindow(tasks_frame, orient=tk.VERTICAL)
         tasks_subframe.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Treeview pour les tâches (sans ID, avec Récurrence et % Terminé)
         tasks_tree_frame = ttk.Frame(tasks_subframe)
         tasks_subframe.add(tasks_tree_frame, weight=1)
 
@@ -642,7 +652,6 @@ class TaskManager:
         self.tasks_tree.column("Progress", width=80, anchor="center")
         self.tasks_tree.pack(fill="both", expand=True)
 
-        # Treeview pour les sous-tâches (sans ID)
         subtasks_tree_frame = ttk.LabelFrame(tasks_subframe, text="Sous-tâches")
         tasks_subframe.add(subtasks_tree_frame, weight=1)
 
@@ -653,14 +662,12 @@ class TaskManager:
         self.subtasks_tree.column("Status", width=80, anchor="center")
         self.subtasks_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Boutons pour marquer les tâches et sous-tâches comme terminées + bouton Actualiser
         button_frame = ttk.Frame(tasks_frame)
         button_frame.pack(fill="x", pady=5)
         ttk.Button(button_frame, text="Marquer Tâche Terminé/En cours", style="ToggleSubtask.TButton", command=self.toggle_task_status_calendar).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Marquer Sous-tâche Terminé/En cours", style="ToggleSubtask.TButton", command=self.toggle_subtask_status_calendar).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Actualiser", style="Refresh.TButton", command=self.refresh_calendar).pack(side="right", padx=5)
 
-        # Fonction pour mettre à jour la liste des tâches
         def update_tasks(event=None):
             selected_task = self.tasks_tree.selection()
             selected_task_title = None
@@ -682,11 +689,12 @@ class TaskManager:
                 self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=? AND status='Terminé'", (task_id,))
                 completed_subtasks = self.cursor.fetchone()[0]
                 progress = f"{int((completed_subtasks / total_subtasks) * 100) if total_subtasks > 0 else 0}%"
+                if status == "Terminé" and total_subtasks == 0:
+                    progress = "100%"
                 item = self.tasks_tree.insert("", tk.END, values=(title, priority, status, recurrence, progress), tags=(task_id,))
                 if title == selected_task_title:
                     self.tasks_tree.selection_set(item)
 
-        # Fonction pour mettre à jour la liste des sous-tâches lorsqu'une tâche est sélectionnée
         def update_subtasks(event=None):
             selected_subtask = self.subtasks_tree.selection()
             selected_subtask_title = None
@@ -705,17 +713,12 @@ class TaskManager:
                 if row[0] == selected_subtask_title:
                     self.subtasks_tree.selection_set(item)
 
-        # Lier les événements
         self.calendar.bind("<<CalendarSelected>>", update_tasks)
         self.tasks_tree.bind("<<TreeviewSelect>>", update_subtasks)
 
-        # Surligner les jours dans le calendrier
         self.highlight_calendar_days()
-
-        # Afficher les tâches pour la date courante par défaut
         update_tasks()
 
-        # Bouton pour fermer la fenêtre
         ttk.Button(self.calendar_window, text="Fermer", command=self.close_calendar).pack(pady=5)
 
     def highlight_calendar_days(self):
@@ -769,31 +772,40 @@ class TaskManager:
             return
 
         title, description, due_date, priority, current_status, recurrence = task
+
+        # Vérifier si toutes les sous-tâches sont terminées
+        self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (task_id,))
+        total_subtasks = self.cursor.fetchone()[0]
+        self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=? AND status='Terminé'", (task_id,))
+        completed_subtasks = self.cursor.fetchone()[0]
+
+        if total_subtasks > 0 and completed_subtasks < total_subtasks and current_status == "En cours":
+            if not messagebox.askyesno("Confirmation", "Certaines sous-tâches ne sont pas terminées. Voulez-vous marquer la tâche comme terminée ?"):
+                return
+            # Marquer toutes les sous-tâches comme terminées
+            self.cursor.execute("UPDATE subtasks SET status='Terminé' WHERE task_id=?", (task_id,))
+            self.conn.commit()
+
         new_status = "Terminé" if current_status == "En cours" else "En cours"
         self.cursor.execute("UPDATE tasks SET status=? WHERE id=?", (new_status, task_id))
         self.conn.commit()
 
-        # Si la tâche est marquée comme terminée et a une récurrence, créer une nouvelle tâche
         if new_status == "Terminé" and recurrence and recurrence != "Aucune":
             new_due_date = self.calculate_next_due_date(due_date, recurrence)
-            # Créer une nouvelle tâche avec le statut "En cours"
             self.cursor.execute("INSERT INTO tasks (title, description, due_date, priority, status, recurrence) VALUES (?, ?, ?, ?, ?, ?)",
                                (title, description, new_due_date, priority, "En cours", recurrence))
             self.conn.commit()
 
-            # Récupérer l'ID de la nouvelle tâche
             self.cursor.execute("SELECT last_insert_rowid()")
             new_task_id = self.cursor.fetchone()[0]
 
-            # Copier les sous-tâches avec le statut "En cours"
             self.cursor.execute("SELECT title FROM subtasks WHERE task_id=?", (task_id,))
-            subtask = self.cursor.fetchall()
+            subtasks = self.cursor.fetchall()
             for subtask in subtasks:
                 subtask_title = subtask[0]
                 self.cursor.execute("INSERT INTO subtasks (task_id, title, status) VALUES (?, ?, 'En cours')",
                                    (new_task_id, subtask_title))
 
-            # Copier les liens de fichiers
             self.cursor_library.execute("SELECT file_id FROM task_file_link WHERE task_id=?", (task_id,))
             file_links = self.cursor_library.fetchall()
             for link in file_links:
@@ -825,7 +837,6 @@ class TaskManager:
         self.cursor.execute("UPDATE subtasks SET status=? WHERE id=?", (new_status, subtask_id))
         self.conn.commit()
 
-        # Vérifier si toutes les sous-tâches sont terminées pour mettre à jour la tâche principale
         self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (task_id,))
         total_subtasks = self.cursor.fetchone()[0]
         self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=? AND status='Terminé'", (task_id,))
@@ -841,7 +852,6 @@ class TaskManager:
             self.cursor.execute("UPDATE tasks SET status='Terminé' WHERE id=?", (task_id,))
             self.conn.commit()
 
-            # Si la tâche a une récurrence, créer une nouvelle tâche
             if recurrence and recurrence != "Aucune":
                 new_due_date = self.calculate_next_due_date(due_date, recurrence)
                 self.cursor.execute("INSERT INTO tasks (title, description, due_date, priority, status, recurrence) VALUES (?, ?, ?, ?, ?, ?)",
@@ -898,6 +908,8 @@ class TaskManager:
                 self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=? AND status='Terminé'", (task_id,))
                 completed_subtasks = self.cursor.fetchone()[0]
                 progress = f"{int((completed_subtasks / total_subtasks) * 100) if total_subtasks > 0 else 0}%"
+                if status == "Terminé" and total_subtasks == 0:
+                    progress = "100%"
                 item = self.tasks_tree.insert("", tk.END, values=(title, priority, status, recurrence, progress), tags=(task_id,))
                 if title == selected_task_title:
                     self.tasks_tree.selection_set(item)
@@ -928,35 +940,29 @@ class TaskManager:
 
         select_window = tk.Toplevel(self.parent)
         select_window.title("Sélectionner une pièce")
-        select_window.geometry("800x600")  # Agrandir la fenêtre pour plus d'espace
+        select_window.geometry("800x600")
         select_window.transient(self.parent)
         select_window.grab_set()
 
-        # Cadre principal avec un PanedWindow pour diviser dossiers et fichiers
         paned_window = ttk.PanedWindow(select_window, orient=tk.HORIZONTAL)
         paned_window.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Volet gauche : Dossiers (année, catégorie, projet)
         folder_frame = ttk.LabelFrame(paned_window, text="Dossiers")
         paned_window.add(folder_frame, weight=1)
 
-        # Barres de recherche pour catégorie et projet
         search_frame = ttk.Frame(folder_frame)
         search_frame.pack(fill="x", padx=5, pady=5)
 
-        # Recherche par catégorie
         ttk.Label(search_frame, text="Catégorie :").pack(side="left")
         self.category_search_var = tk.StringVar()
         category_search_entry = ttk.Entry(search_frame, textvariable=self.category_search_var)
         category_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
-        # Recherche par projet
         ttk.Label(search_frame, text="Projet :").pack(side="left")
         self.project_search_var = tk.StringVar()
         project_search_entry = ttk.Entry(search_frame, textvariable=self.project_search_var)
         project_search_entry.pack(side="left", fill="x", expand=True)
 
-        # Treeview pour les dossiers
         folder_tree = ttk.Treeview(folder_frame, columns=("Year", "Category", "Project"), show="headings")
         folder_tree.heading("Year", text="Année")
         folder_tree.heading("Category", text="Catégorie")
@@ -966,11 +972,9 @@ class TaskManager:
         folder_tree.column("Project", width=200)
         folder_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Volet droit : Fichiers (ID, titre)
         file_frame = ttk.LabelFrame(paned_window, text="Fichiers")
         paned_window.add(file_frame, weight=3)
 
-        # Barre de recherche pour les fichiers
         file_search_frame = ttk.Frame(file_frame)
         file_search_frame.pack(fill="x", padx=5, pady=5)
         ttk.Label(file_search_frame, text="Rechercher fichier :").pack(side="left")
@@ -978,7 +982,6 @@ class TaskManager:
         file_search_entry = ttk.Entry(file_search_frame, textvariable=self.file_search_var)
         file_search_entry.pack(side="left", fill="x", expand=True)
 
-        # Treeview pour les fichiers
         file_tree = ttk.Treeview(file_frame, columns=("ID", "Title"), show="headings")
         file_tree.heading("ID", text="ID")
         file_tree.heading("Title", text="Titre")
@@ -986,13 +989,11 @@ class TaskManager:
         file_tree.column("Title", width=450)
         file_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Charger les données initiales dans le Treeview des dossiers
         self.cursor_library.execute("SELECT DISTINCT year, category, project FROM library WHERE file_path != '' OR title = '[Dossier]'")
         folder_data = self.cursor_library.fetchall()
         for row in folder_data:
             folder_tree.insert("", tk.END, values=row)
 
-        # Fonction pour filtrer les dossiers (catégorie et projet)
         def filter_folders(event=None):
             for item in folder_tree.get_children():
                 folder_tree.delete(item)
@@ -1009,7 +1010,6 @@ class TaskManager:
             for row in filtered_data:
                 folder_tree.insert("", tk.END, values=row)
 
-        # Fonction pour charger et filtrer les fichiers
         def load_and_filter_files(event=None):
             for item in file_tree.get_children():
                 file_tree.delete(item)
@@ -1032,13 +1032,11 @@ class TaskManager:
             for row in filtered_files:
                 file_tree.insert("", tk.END, values=row)
 
-        # Lier les événements de recherche
         category_search_entry.bind("<KeyRelease>", filter_folders)
         project_search_entry.bind("<KeyRelease>", filter_folders)
         file_search_entry.bind("<KeyRelease>", load_and_filter_files)
         folder_tree.bind("<<TreeviewSelect>>", load_and_filter_files)
 
-        # Initialiser l'affichage des dossiers
         filter_folders()
 
         def apply_selection():
@@ -1056,7 +1054,6 @@ class TaskManager:
             self.refresh_associated_files()
             select_window.destroy()
 
-        # Boutons pour associer ou annuler
         ttk.Button(select_window, text="Associer", command=apply_selection).pack(pady=5)
         ttk.Button(select_window, text="Annuler", command=select_window.destroy).pack(pady=5)
 
@@ -1166,12 +1163,14 @@ class TaskManager:
 
         for row in rows:
             task_id = row[0]
-            due_date = row[2] if row[2] else "9999-12-31"  # Valeur par défaut pour le tri si due_date est vide
+            due_date = row[2] if row[2] else "9999-12-31"
             self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (task_id,))
             total_subtasks = self.cursor.fetchone()[0]
             self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=? AND status='Terminé'", (task_id,))
             completed_subtasks = self.cursor.fetchone()[0]
             progress = f"{int((completed_subtasks / total_subtasks) * 100) if total_subtasks > 0 else 0}%"
+            if row[4] == "Terminé" and total_subtasks == 0:
+                progress = "100%"
             values = (row[0], row[1], row[2], row[3], row[4], row[5], progress)
             tags = []
             if row[2]:
@@ -1181,11 +1180,9 @@ class TaskManager:
                 elif row[4] == "Terminé":
                     tags.append("completed")
             item = self.task_tree.insert("", tk.END, values=values, tags=tags)
-            # Stocker l'IID, la date d'échéance et l'item pour le tri
             items.append((item, task_id, due_date))
 
-        # Trier par date d'échéance par défaut
-        items.sort(key=lambda x: x[2])  # x[2] est la due_date
+        items.sort(key=lambda x: x[2])
         for index, (item, task_id, due_date) in enumerate(items):
             self.task_tree.move(item, "", index)
 
@@ -1230,7 +1227,7 @@ class TaskManager:
             self.toggle_subtask_btn.config(state="normal")
             self.refresh_associated_files()
             self.refresh_subtasks()
-        except Exception as e:
+        except Exception:
             self.clear_task_form()
 
     def clear_task_form(self):
