@@ -312,11 +312,9 @@ class ArchivisteApp:
             FOREIGN KEY (meter_id) REFERENCES meters(id),
             FOREIGN KEY (parameter_id) REFERENCES parameters(id)
         )''')
-        # Vérifier et mettre à jour la structure de la table readings
         cursor.execute("PRAGMA table_info(readings)")
         columns = [info[1] for info in cursor.fetchall()]
         if 'attachment_path' in columns:
-            # Créer une table temporaire avec la nouvelle structure
             cursor.execute('''CREATE TABLE readings_temp (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 meter_id INTEGER,
@@ -328,15 +326,11 @@ class ArchivisteApp:
                 FOREIGN KEY (meter_id) REFERENCES meters(id),
                 FOREIGN KEY (parameter_id) REFERENCES parameters(id)
             )''')
-            # Copier les données existantes (sans attachment_path)
             cursor.execute('''INSERT INTO readings_temp (id, meter_id, parameter_id, date, value, note)
                              SELECT id, meter_id, parameter_id, date, value, note FROM readings''')
-            # Supprimer l'ancienne table
             cursor.execute('DROP TABLE readings')
-            # Renommer la table temporaire
             cursor.execute('ALTER TABLE readings_temp RENAME TO readings')
         elif 'library_file_id' not in columns:
-            # Ajouter library_file_id si elle n'existe pas
             cursor.execute('ALTER TABLE readings ADD COLUMN library_file_id INTEGER')
 
     def create_tables_compteurs(self, cursor):
@@ -395,13 +389,15 @@ class ArchivisteApp:
             title TEXT NOT NULL,
             year TEXT,
             category TEXT,
+            archives TEXT,
             project TEXT,
             site TEXT,
             nomenclature TEXT,
             emetteur TEXT,
             objet TEXT,
             version TEXT,
-            file_path TEXT
+            file_path TEXT,
+            notes TEXT
         )''')
         cursor.execute('''CREATE TABLE IF NOT EXISTS task_file_link (
             task_id INTEGER,
@@ -417,6 +413,11 @@ class ArchivisteApp:
             FOREIGN KEY (file_id) REFERENCES library(id),
             PRIMARY KEY (reading_id, file_id)
         )''')
+        # Vérifier et ajouter la colonne archives si elle n'existe pas
+        cursor.execute("PRAGMA table_info(library)")
+        columns = [info[1] for info in cursor.fetchall()]
+        if 'archives' not in columns:
+            cursor.execute("ALTER TABLE library ADD COLUMN archives TEXT")
 
     def update_connection_after_import(self, conn_audit, conn_compteurs, conn_tasks, conn_library):
         self.conn_audit = conn_audit

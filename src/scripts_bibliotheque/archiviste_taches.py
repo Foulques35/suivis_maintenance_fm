@@ -39,6 +39,9 @@ class TaskManager:
         style.configure("ModifySubtask.TButton", background="#FFFFE0", foreground="black")  # Jaune clair
         style.configure("Calendar.TButton", background="#ADD8E6", foreground="black")  # Bleu clair pour le bouton Vue Planning
         style.configure("Refresh.TButton", background="#ADD8E6", foreground="black")  # Bleu clair pour le bouton Actualiser
+        # Styles pour lignes alternées
+        style.configure("OddRow.Treeview", background="#F5F5F5")
+        style.configure("EvenRow.Treeview", background="#FFFFFF")
 
         # Interface principale avec deux volets horizontaux
         self.main_frame = ttk.PanedWindow(self.parent, orient=tk.HORIZONTAL)
@@ -46,7 +49,7 @@ class TaskManager:
 
         # Volet gauche : Liste des tâches
         self.tasks_frame = ttk.LabelFrame(self.main_frame, text="Liste des Tâches")
-        self.main_frame.add(self.tasks_frame, weight=2)
+        self.main_frame.add(self.tasks_frame, weight=3)  # Augmenter la taille du Treeview
 
         # Filtres
         filter_frame = ttk.Frame(self.tasks_frame)
@@ -99,7 +102,7 @@ class TaskManager:
 
         # Volet droit : Formulaire pour gérer les tâches
         self.form_frame = ttk.LabelFrame(self.main_frame, text="Gestion des Tâches")
-        self.main_frame.add(self.form_frame, weight=3)
+        self.main_frame.add(self.form_frame, weight=1)  # Réduire la taille du formulaire
 
         # Grille pour le formulaire
         form_grid = ttk.Frame(self.form_frame)
@@ -350,6 +353,9 @@ class TaskManager:
             messagebox.showwarning("Erreur", "Sélectionnez une tâche à modifier.")
             return
 
+        if not messagebox.askyesno("Confirmation", "Voulez-vous vraiment modifier cette tâche ?"):
+            return
+
         title = self.title_var.get()
         description = self.description_text.get("1.0", tk.END).strip()
         due_date = self.due_date_var.get()
@@ -378,22 +384,25 @@ class TaskManager:
         if not selected:
             messagebox.showwarning("Erreur", "Veuillez sélectionner au moins une tâche à supprimer.")
             return
-        if messagebox.askyesno("Confirmation", f"Supprimer les {len(selected)} tâches sélectionnées ?"):
-            for item in selected:
-                task_id = self.task_tree.item(item)["values"][0]
-                self.cursor.execute("DELETE FROM subtasks WHERE task_id=?", (task_id,))
-                self.cursor_library.execute("DELETE FROM task_file_link WHERE task_id=?", (task_id,))
-                self.conn_library.commit()
-                self.cursor.execute("DELETE FROM tasks WHERE id=?", (task_id,))
-            self.conn.commit()
-            self.clear_task_form()
-            self.refresh_task_list()
-            self.parent.after(100, self.refresh_calendar)
-            messagebox.showinfo("Succès", f"{len(selected)} tâches supprimées.")
+        if not messagebox.askyesno("Confirmation", f"Supprimer les {len(selected)} tâches sélectionnées ?"):
+            return
+        for item in selected:
+            task_id = self.task_tree.item(item)["values"][0]
+            self.cursor.execute("DELETE FROM subtasks WHERE task_id=?", (task_id,))
+            self.cursor_library.execute("DELETE FROM task_file_link WHERE task_id=?", (task_id,))
+            self.conn_library.commit()
+            self.cursor.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+        self.conn.commit()
+        self.clear_task_form()
+        self.refresh_task_list()
+        self.parent.after(100, self.refresh_calendar)
+        messagebox.showinfo("Succès", f"{len(selected)} tâches supprimées.")
 
     def mark_completed(self):
         if not self.current_task_id:
             messagebox.showwarning("Erreur", "Sélectionnez une tâche à marquer comme terminée.")
+            return
+        if not messagebox.askyesno("Confirmation", "Marquer cette tâche comme terminée ?"):
             return
         self.cursor.execute("SELECT title, description, due_date, priority, recurrence FROM tasks WHERE id=?", (self.current_task_id,))
         task = self.cursor.fetchone()
@@ -487,6 +496,8 @@ class TaskManager:
             if not title:
                 messagebox.showwarning("Erreur", "Le titre de la sous-tâche est obligatoire.")
                 return
+            if not messagebox.askyesno("Confirmation", "Ajouter cette sous-tâche ?"):
+                return
             self.cursor.execute("INSERT INTO subtasks (task_id, title, status) VALUES (?, ?, 'En cours')",
                                (self.current_task_id, title))
             self.conn.commit()
@@ -507,6 +518,8 @@ class TaskManager:
         self.cursor.execute("SELECT status FROM subtasks WHERE id=?", (subtask_id,))
         current_status = self.cursor.fetchone()[0]
         new_status = "Terminé" if current_status == "En cours" else "En cours"
+        if not messagebox.askyesno("Confirmation", f"Marquer cette sous-tâche comme {new_status.lower()} ?"):
+            return
         self.cursor.execute("UPDATE subtasks SET status=? WHERE id=?", (new_status, subtask_id))
         self.conn.commit()
         self.refresh_subtasks()
@@ -519,12 +532,13 @@ class TaskManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une sous-tâche à supprimer.")
             return
         subtask_id = self.subtask_tree.item(selected[0])["values"][0]
-        if messagebox.askyesno("Confirmation", "Supprimer cette sous-tâche ?"):
-            self.cursor.execute("DELETE FROM subtasks WHERE id=?", (subtask_id,))
-            self.conn.commit()
-            self.refresh_subtasks()
-            self.refresh_task_list()
-            self.parent.after(100, self.refresh_calendar)
+        if not messagebox.askyesno("Confirmation", "Supprimer cette sous-tâche ?"):
+            return
+        self.cursor.execute("DELETE FROM subtasks WHERE id=?", (subtask_id,))
+        self.conn.commit()
+        self.refresh_subtasks()
+        self.refresh_task_list()
+        self.parent.after(100, self.refresh_calendar)
 
     def modify_subtask(self):
         selected = self.subtask_tree.selection()
@@ -550,6 +564,8 @@ class TaskManager:
             if not new_title:
                 messagebox.showwarning("Erreur", "Le titre de la sous-tâche est obligatoire.")
                 return
+            if not messagebox.askyesno("Confirmation", "Modifier cette sous-tâche ?"):
+                return
             self.cursor.execute("UPDATE subtasks SET title=? WHERE id=?", (new_title, subtask_id))
             self.conn.commit()
             self.refresh_subtasks()
@@ -573,8 +589,9 @@ class TaskManager:
         total_subtasks = 0
         completed_subtasks = 0
         in_progress_subtasks = 0
-        for row in self.cursor.fetchall():
-            self.subtask_tree.insert("", tk.END, values=row)
+        for index, row in enumerate(self.cursor.fetchall()):
+            tag = "OddRow" if index % 2 else "EvenRow"
+            self.subtask_tree.insert("", tk.END, values=row, tags=(tag,))
             total_subtasks += 1
             if row[2] == "Terminé":
                 completed_subtasks += 1
@@ -682,7 +699,7 @@ class TaskManager:
             tasks_frame.config(text=f"Tâches pour le {selected_date}")
             self.cursor.execute("SELECT id, title, priority, status, recurrence FROM tasks WHERE due_date=?", (selected_date,))
             tasks = self.cursor.fetchall()
-            for task in tasks:
+            for index, task in enumerate(tasks):
                 task_id, title, priority, status, recurrence = task
                 self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (task_id,))
                 total_subtasks = self.cursor.fetchone()[0]
@@ -691,7 +708,8 @@ class TaskManager:
                 progress = f"{int((completed_subtasks / total_subtasks) * 100) if total_subtasks > 0 else 0}%"
                 if status == "Terminé" and total_subtasks == 0:
                     progress = "100%"
-                item = self.tasks_tree.insert("", tk.END, values=(title, priority, status, recurrence, progress), tags=(task_id,))
+                tag = "OddRow" if index % 2 else "EvenRow"
+                item = self.tasks_tree.insert("", tk.END, values=(title, priority, status, recurrence, progress), tags=(task_id, tag))
                 if title == selected_task_title:
                     self.tasks_tree.selection_set(item)
 
@@ -708,8 +726,9 @@ class TaskManager:
                 return
             task_id = self.tasks_tree.item(selected[0])["tags"][0]
             self.cursor.execute("SELECT title, status FROM subtasks WHERE task_id=?", (task_id,))
-            for row in self.cursor.fetchall():
-                item = self.subtasks_tree.insert("", tk.END, values=row)
+            for index, row in enumerate(self.cursor.fetchall()):
+                tag = "OddRow" if index % 2 else "EvenRow"
+                item = self.subtasks_tree.insert("", tk.END, values=row, tags=(tag,))
                 if row[0] == selected_subtask_title:
                     self.subtasks_tree.selection_set(item)
 
@@ -787,6 +806,8 @@ class TaskManager:
             self.conn.commit()
 
         new_status = "Terminé" if current_status == "En cours" else "En cours"
+        if not messagebox.askyesno("Confirmation", f"Marquer la tâche comme {new_status.lower()} ?"):
+            return
         self.cursor.execute("UPDATE tasks SET status=? WHERE id=?", (new_status, task_id))
         self.conn.commit()
 
@@ -834,6 +855,8 @@ class TaskManager:
             return
         subtask_id, current_status = subtask
         new_status = "Terminé" if current_status == "En cours" else "En cours"
+        if not messagebox.askyesno("Confirmation", f"Marquer cette sous-tâche comme {new_status.lower()} ?"):
+            return
         self.cursor.execute("UPDATE subtasks SET status=? WHERE id=?", (new_status, subtask_id))
         self.conn.commit()
 
@@ -901,7 +924,7 @@ class TaskManager:
                 self.subtasks_tree.delete(item)
             self.cursor.execute("SELECT id, title, priority, status, recurrence FROM tasks WHERE due_date=?", (selected_date,))
             tasks = self.cursor.fetchall()
-            for task in tasks:
+            for index, task in enumerate(tasks):
                 task_id, title, priority, status, recurrence = task
                 self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (task_id,))
                 total_subtasks = self.cursor.fetchone()[0]
@@ -910,7 +933,8 @@ class TaskManager:
                 progress = f"{int((completed_subtasks / total_subtasks) * 100) if total_subtasks > 0 else 0}%"
                 if status == "Terminé" and total_subtasks == 0:
                     progress = "100%"
-                item = self.tasks_tree.insert("", tk.END, values=(title, priority, status, recurrence, progress), tags=(task_id,))
+                tag = "OddRow" if index % 2 else "EvenRow"
+                item = self.tasks_tree.insert("", tk.END, values=(title, priority, status, recurrence, progress), tags=(task_id, tag))
                 if title == selected_task_title:
                     self.tasks_tree.selection_set(item)
 
@@ -919,8 +943,9 @@ class TaskManager:
                 if selected:
                     task_id = self.tasks_tree.item(selected[0])["tags"][0]
                     self.cursor.execute("SELECT title, status FROM subtasks WHERE task_id=?", (task_id,))
-                    for row in self.cursor.fetchall():
-                        item = self.subtasks_tree.insert("", tk.END, values=row)
+                    for index, row in enumerate(self.cursor.fetchall()):
+                        tag = "OddRow" if index % 2 else "EvenRow"
+                        item = self.subtasks_tree.insert("", tk.END, values=row, tags=(tag,))
                         if row[0] == selected_subtask_title:
                             self.subtasks_tree.selection_set(item)
 
@@ -940,7 +965,7 @@ class TaskManager:
 
         select_window = tk.Toplevel(self.parent)
         select_window.title("Sélectionner une pièce")
-        select_window.geometry("800x600")
+        select_window.geometry("1600x600")  # Doubled width from 800 to 1600
         select_window.transient(self.parent)
         select_window.grab_set()
 
@@ -953,22 +978,34 @@ class TaskManager:
         search_frame = ttk.Frame(folder_frame)
         search_frame.pack(fill="x", padx=5, pady=5)
 
+        ttk.Label(search_frame, text="Année :").pack(side="left")
+        self.year_search_var = tk.StringVar()
+        year_search_entry = ttk.Entry(search_frame, textvariable=self.year_search_var)
+        year_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
         ttk.Label(search_frame, text="Catégorie :").pack(side="left")
         self.category_search_var = tk.StringVar()
         category_search_entry = ttk.Entry(search_frame, textvariable=self.category_search_var)
         category_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        ttk.Label(search_frame, text="Archives :").pack(side="left")
+        self.archives_search_var = tk.StringVar()
+        archives_search_entry = ttk.Entry(search_frame, textvariable=self.archives_search_var)
+        archives_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
 
         ttk.Label(search_frame, text="Projet :").pack(side="left")
         self.project_search_var = tk.StringVar()
         project_search_entry = ttk.Entry(search_frame, textvariable=self.project_search_var)
         project_search_entry.pack(side="left", fill="x", expand=True)
 
-        folder_tree = ttk.Treeview(folder_frame, columns=("Year", "Category", "Project"), show="headings")
+        folder_tree = ttk.Treeview(folder_frame, columns=("Year", "Category", "Archives", "Project"), show="headings")
         folder_tree.heading("Year", text="Année")
         folder_tree.heading("Category", text="Catégorie")
+        folder_tree.heading("Archives", text="Archives")
         folder_tree.heading("Project", text="Projet")
         folder_tree.column("Year", width=100)
         folder_tree.column("Category", width=150)
+        folder_tree.column("Archives", width=150)
         folder_tree.column("Project", width=200)
         folder_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
@@ -989,26 +1026,34 @@ class TaskManager:
         file_tree.column("Title", width=450)
         file_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
-        self.cursor_library.execute("SELECT DISTINCT year, category, project FROM library WHERE file_path != '' OR title = '[Dossier]'")
+        self.cursor_library.execute("SELECT DISTINCT year, category, archives, project FROM library WHERE file_path != '' OR title = '[Dossier]'")
         folder_data = self.cursor_library.fetchall()
-        for row in folder_data:
-            folder_tree.insert("", tk.END, values=row)
+        for index, row in enumerate(folder_data):
+            normalized_row = (row[0], row[1], row[2] or "", row[3])
+            tag = "OddRow" if index % 2 else "EvenRow"
+            folder_tree.insert("", tk.END, values=normalized_row, tags=(tag,))
 
         def filter_folders(event=None):
             for item in folder_tree.get_children():
                 folder_tree.delete(item)
             
+            year_search = self.year_search_var.get().lower()
             category_search = self.category_search_var.get().lower()
+            archives_search = self.archives_search_var.get().lower()
             project_search = self.project_search_var.get().lower()
             
             filtered_data = [
                 row for row in folder_data
-                if (not category_search or category_search in row[1].lower())
-                and (not project_search or project_search in row[2].lower())
+                if (not year_search or year_search in str(row[0]).lower())
+                and (not category_search or category_search in str(row[1]).lower())
+                and (not archives_search or archives_search in str(row[2] or "").lower())
+                and (not project_search or project_search in str(row[3]).lower())
             ]
             
-            for row in filtered_data:
-                folder_tree.insert("", tk.END, values=row)
+            for index, row in enumerate(filtered_data):
+                normalized_row = (row[0], row[1], row[2] or "", row[3])
+                tag = "OddRow" if index % 2 else "EvenRow"
+                folder_tree.insert("", tk.END, values=normalized_row, tags=(tag,))
 
         def load_and_filter_files(event=None):
             for item in file_tree.get_children():
@@ -1016,23 +1061,21 @@ class TaskManager:
             selected = folder_tree.selection()
             if not selected:
                 return
-            year, category, project = folder_tree.item(selected[0])["values"]
+            year, category, archives, project = folder_tree.item(selected[0])["values"]
             
             file_search = self.file_search_var.get().lower()
             
-            self.cursor_library.execute("SELECT id, title FROM library WHERE year=? AND category=? AND project=? AND file_path != ''",
-                                       (year, category, project))
+            self.cursor_library.execute("SELECT id, title FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=? AND file_path != ''",
+                                       (year, category, archives or None, project))
             files = self.cursor_library.fetchall()
             
-            filtered_files = [
-                row for row in files
-                if not file_search or file_search in row[1].lower()
-            ]
-            
-            for row in filtered_files:
-                file_tree.insert("", tk.END, values=row)
+            for index, row in enumerate(files):
+                tag = "OddRow" if index % 2 else "EvenRow"
+                file_tree.insert("", tk.END, values=row, tags=(tag,))
 
+        year_search_entry.bind("<KeyRelease>", filter_folders)
         category_search_entry.bind("<KeyRelease>", filter_folders)
+        archives_search_entry.bind("<KeyRelease>", filter_folders)
         project_search_entry.bind("<KeyRelease>", filter_folders)
         file_search_entry.bind("<KeyRelease>", load_and_filter_files)
         folder_tree.bind("<<TreeviewSelect>>", load_and_filter_files)
@@ -1063,10 +1106,11 @@ class TaskManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce à dissocier.")
             return
         file_id = self.associated_tree.item(selected[0])["values"][0]
-        if messagebox.askyesno("Confirmation", "Dissocier cette pièce de la tâche ?"):
-            self.cursor_library.execute("DELETE FROM task_file_link WHERE task_id=? AND file_id=?", (self.current_task_id, file_id))
-            self.conn_library.commit()
-            self.refresh_associated_files()
+        if not messagebox.askyesno("Confirmation", "Dissocier cette pièce de la tâche ?"):
+            return
+        self.cursor_library.execute("DELETE FROM task_file_link WHERE task_id=? AND file_id=?", (self.current_task_id, file_id))
+        self.conn_library.commit()
+        self.refresh_associated_files()
 
     def open_associated_file(self):
         selected = self.associated_tree.selection()
@@ -1161,7 +1205,7 @@ class TaskManager:
         today = datetime.now().date()
         threshold_date = today + timedelta(days=3)
 
-        for row in rows:
+        for index, row in enumerate(rows):
             task_id = row[0]
             due_date = row[2] if row[2] else "9999-12-31"
             self.cursor.execute("SELECT COUNT(*) FROM subtasks WHERE task_id=?", (task_id,))
@@ -1172,7 +1216,7 @@ class TaskManager:
             if row[4] == "Terminé" and total_subtasks == 0:
                 progress = "100%"
             values = (row[0], row[1], row[2], row[3], row[4], row[5], progress)
-            tags = []
+            tags = ["OddRow" if index % 2 else "EvenRow"]
             if row[2]:
                 due_date_obj = datetime.strptime(row[2], "%Y-%m-%d").date()
                 if (due_date_obj <= today or due_date_obj <= threshold_date) and row[4] == "En cours":
@@ -1259,8 +1303,9 @@ class TaskManager:
                                       FROM library l 
                                       JOIN task_file_link tfl ON l.id = tfl.file_id 
                                       WHERE tfl.task_id=?''', (self.current_task_id,))
-        for row in self.cursor_library.fetchall():
-            self.associated_tree.insert("", tk.END, values=row)
+        for index, row in enumerate(self.cursor_library.fetchall()):
+            tag = "OddRow" if index % 2 else "EvenRow"
+            self.associated_tree.insert("", tk.END, values=row, tags=(tag,))
 
     def export_to_csv(self):
         if not self.task_tree.get_children():

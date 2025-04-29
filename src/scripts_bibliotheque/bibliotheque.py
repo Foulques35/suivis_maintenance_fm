@@ -29,21 +29,26 @@ class LibraryManager:
         self.init_nomenclatures_file()
         self.init_sites_file()
 
-        # Nettoyer les chemins dans la base de données au démarrage
+        # Nettoyer les chemins dans la base de données
         self.clean_file_paths()
 
         # Variables pour les filtres du Treeview 1
         self.year_filter_var = tk.StringVar()
         self.category_filter_var = tk.StringVar()
+        self.archives_filter_var = tk.StringVar()
         self.project_filter_var = tk.StringVar()
 
         # Variables pour le tri
         self.sort_column_name = "Year"
         self.sort_reverse = False
-        self.sort_direction = {"Year": False, "Category": False, "Project": False, "Notes": False}
+        self.sort_direction = {"Year": False, "Category": False, "Archives": False, "Project": False, "Notes": False}
 
-        # Stocker toutes les données des dossiers
+        # Stocker toutes les données des dossiers et fichiers
         self.all_folders = []
+        self.all_files = []  # New: Store file metadata (id, title, year, category, archives, project)
+
+        # Charger les données initiales
+        self.load_initial_data()
 
         # Configurer les styles pour les boutons
         style = ttk.Style()
@@ -52,13 +57,17 @@ class LibraryManager:
         style.configure("Clear.TButton", background="#ADD8E6", foreground="black")  # Bleu clair
         style.configure("Delete.TButton", background="#FF0000", foreground="#FFFFFF")  # Rouge, texte blanc
 
+        # Configurer les styles pour les lignes alternées
+        style.configure("OddRow.Treeview", background="#F5F5F5")
+        style.configure("EvenRow.Treeview", background="#FFFFFF")
+
         # Interface principale avec PanedWindow
         self.paned_window = ttk.PanedWindow(self.parent, orient=tk.HORIZONTAL)
         self.paned_window.pack(fill="both", expand=True, padx=10, pady=10)
 
-        # Gauche : Treeview 1 (Année, Catégorie, Projet, Notes) avec filtres
+        # Gauche : Treeview 1 (Année, Catégorie, Archives, Projet, Notes) avec filtres
         left_frame = ttk.Frame(self.paned_window)
-        self.paned_window.add(left_frame, weight=1)
+        self.paned_window.add(left_frame, weight=3)  # Augmenter la taille du Treeview
 
         # Filtres pour Treeview 1
         filter_frame = ttk.Frame(left_frame)
@@ -67,19 +76,24 @@ class LibraryManager:
         ttk.Entry(filter_frame, textvariable=self.year_filter_var, width=10).pack(side="left", padx=5)
         ttk.Label(filter_frame, text="Catégorie :").pack(side="left")
         ttk.Entry(filter_frame, textvariable=self.category_filter_var, width=15).pack(side="left", padx=5)
+        ttk.Label(filter_frame, text="Archives :").pack(side="left")
+        ttk.Entry(filter_frame, textvariable=self.archives_filter_var, width=15).pack(side="left", padx=5)
         ttk.Label(filter_frame, text="Projet :").pack(side="left")
         ttk.Entry(filter_frame, textvariable=self.project_filter_var, width=20).pack(side="left", padx=5)
         self.year_filter_var.trace("w", self.filter_folders)
         self.category_filter_var.trace("w", self.filter_folders)
+        self.archives_filter_var.trace("w", self.filter_folders)
         self.project_filter_var.trace("w", self.filter_folders)
 
-        self.folder_tree = ttk.Treeview(left_frame, columns=("Year", "Category", "Project", "Notes"), show="headings")
+        self.folder_tree = ttk.Treeview(left_frame, columns=("Year", "Category", "Archives", "Project", "Notes"), show="headings")
         self.folder_tree.heading("Year", text="Année", command=lambda: self.sort_column("Year", self.sort_direction["Year"]))
         self.folder_tree.heading("Category", text="Catégorie", command=lambda: self.sort_column("Category", self.sort_direction["Category"]))
+        self.folder_tree.heading("Archives", text="Archives", command=lambda: self.sort_column("Archives", self.sort_direction["Archives"]))
         self.folder_tree.heading("Project", text="Projet", command=lambda: self.sort_column("Project", self.sort_direction["Project"]))
         self.folder_tree.heading("Notes", text="Notes", command=lambda: self.sort_column("Notes", self.sort_direction["Notes"]))
         self.folder_tree.column("Year", width=100)
         self.folder_tree.column("Category", width=150)
+        self.folder_tree.column("Archives", width=150)
         self.folder_tree.column("Project", width=200)
         self.folder_tree.column("Notes", width=200)
         self.folder_tree.pack(fill="both", expand=True, padx=5, pady=5)
@@ -87,30 +101,35 @@ class LibraryManager:
 
         # Droite : Formulaires et Treeview 2
         right_frame = ttk.Frame(self.paned_window)
-        self.paned_window.add(right_frame, weight=3)
+        self.paned_window.add(right_frame, weight=1)  # Réduire la taille du formulaire
 
-        # Formulaire 1 : Année, Catégorie, Projet, Notes
+        # Formulaire 1 : Année, Catégorie, Archives, Projet, Notes
         folder_form_frame = ttk.LabelFrame(right_frame, text="Gestion des dossiers")
         folder_form_frame.pack(fill="x", pady=5)
 
+        # Grille pour un formulaire ordonné
         ttk.Label(folder_form_frame, text="Année :").grid(row=0, column=0, padx=5, pady=2, sticky="w")
         self.folder_year_var = tk.StringVar(value=str(datetime.now().year))
-        ttk.Entry(folder_form_frame, textvariable=self.folder_year_var, width=10).grid(row=0, column=1, padx=5, pady=2)
+        ttk.Entry(folder_form_frame, textvariable=self.folder_year_var, width=10).grid(row=0, column=1, padx=5, pady=2, sticky="w")
 
-        ttk.Label(folder_form_frame, text="Catégorie :").grid(row=0, column=2, padx=5, pady=2, sticky="w")
+        ttk.Label(folder_form_frame, text="Catégorie :").grid(row=1, column=0, padx=5, pady=2, sticky="w")
         self.folder_category_var = tk.StringVar()
-        ttk.Entry(folder_form_frame, textvariable=self.folder_category_var, width=15).grid(row=0, column=3, padx=5, pady=2)
+        ttk.Entry(folder_form_frame, textvariable=self.folder_category_var, width=20).grid(row=1, column=1, padx=5, pady=2, sticky="w")
 
-        ttk.Label(folder_form_frame, text="Projet :").grid(row=0, column=4, padx=5, pady=2, sticky="w")
+        ttk.Label(folder_form_frame, text="Archives :").grid(row=2, column=0, padx=5, pady=2, sticky="w")
+        self.folder_archives_var = tk.StringVar()
+        ttk.Entry(folder_form_frame, textvariable=self.folder_archives_var, width=20).grid(row=2, column=1, padx=5, pady=2, sticky="w")
+
+        ttk.Label(folder_form_frame, text="Projet :").grid(row=3, column=0, padx=5, pady=2, sticky="w")
         self.folder_project_var = tk.StringVar()
-        ttk.Entry(folder_form_frame, textvariable=self.folder_project_var, width=20).grid(row=0, column=5, padx=5, pady=2)
+        ttk.Entry(folder_form_frame, textvariable=self.folder_project_var, width=20).grid(row=3, column=1, padx=5, pady=2, sticky="w")
 
-        ttk.Label(folder_form_frame, text="Notes :").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(folder_form_frame, text="Notes :").grid(row=4, column=0, padx=5, pady=2, sticky="w")
         self.folder_notes_var = tk.StringVar()
-        ttk.Entry(folder_form_frame, textvariable=self.folder_notes_var, width=50).grid(row=1, column=1, columnspan=5, padx=5, pady=2, sticky="w")
+        ttk.Entry(folder_form_frame, textvariable=self.folder_notes_var, width=50).grid(row=4, column=1, padx=5, pady=2, sticky="w")
 
         folder_button_frame = ttk.Frame(folder_form_frame)
-        folder_button_frame.grid(row=2, column=0, columnspan=7, pady=5)
+        folder_button_frame.grid(row=5, column=0, columnspan=2, pady=5)
         ttk.Button(folder_button_frame, text="Ajouter dossier", style="Add.TButton", command=self.add_folder).pack(side="left", padx=5)
         ttk.Button(folder_button_frame, text="Modifier dossier", style="Modify.TButton", command=self.modify_folder).pack(side="left", padx=5)
         ttk.Button(folder_button_frame, text="Vider formulaire", style="Clear.TButton", command=self.clear_folder_form).pack(side="left", padx=5)
@@ -123,41 +142,41 @@ class LibraryManager:
 
         # Case à cocher pour conserver le nom du fichier
         self.keep_name_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(file_form_frame, text="Conserver le nom du fichier", variable=self.keep_name_var, command=self.toggle_file_fields).grid(row=0, column=0, columnspan=6, pady=2, sticky="w")
+        ttk.Checkbutton(file_form_frame, text="Conserver le nom du fichier", variable=self.keep_name_var, command=self.toggle_file_fields).grid(row=0, column=0, columnspan=2, pady=2, sticky="w")
 
         # Case à cocher pour couper/copier
         self.move_file_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(file_form_frame, text="Couper (déplacer) / Copier", variable=self.move_file_var).grid(row=1, column=0, columnspan=6, pady=2, sticky="w")
+        ttk.Checkbutton(file_form_frame, text="Couper (déplacer) / Copier", variable=self.move_file_var).grid(row=1, column=0, columnspan=2, pady=2, sticky="w")
 
         ttk.Label(file_form_frame, text="Site :").grid(row=2, column=0, padx=5, pady=2, sticky="w")
         self.site_var = tk.StringVar()
         self.site_entry = ttk.Entry(file_form_frame, textvariable=self.site_var, width=15)
-        self.site_entry.grid(row=2, column=1, padx=5, pady=2)
+        self.site_entry.grid(row=2, column=1, padx=5, pady=2, sticky="w")
         ttk.Button(file_form_frame, text="?", command=self.show_sites).grid(row=2, column=2, padx=2, pady=2)
 
-        ttk.Label(file_form_frame, text="Nomenclature :").grid(row=2, column=3, padx=5, pady=2, sticky="w")
+        ttk.Label(file_form_frame, text="Nomenclature :").grid(row=3, column=0, padx=5, pady=2, sticky="w")
         self.nomenclature_var = tk.StringVar()
         self.nomenclature_entry = ttk.Entry(file_form_frame, textvariable=self.nomenclature_var, width=10)
-        self.nomenclature_entry.grid(row=2, column=4, padx=5, pady=2)
-        ttk.Button(file_form_frame, text="?", command=self.show_nomenclatures).grid(row=2, column=5, padx=2, pady=2)
+        self.nomenclature_entry.grid(row=3, column=1, padx=5, pady=2, sticky="w")
+        ttk.Button(file_form_frame, text="?", command=self.show_nomenclatures).grid(row=3, column=2, padx=2, pady=2)
 
-        ttk.Label(file_form_frame, text="Émetteur :").grid(row=3, column=0, padx=5, pady=2, sticky="w")
+        ttk.Label(file_form_frame, text="Émetteur :").grid(row=4, column=0, padx=5, pady=2, sticky="w")
         self.emetteur_var = tk.StringVar()
         self.emetteur_entry = ttk.Entry(file_form_frame, textvariable=self.emetteur_var, width=15)
-        self.emetteur_entry.grid(row=3, column=1, padx=5, pady=2)
+        self.emetteur_entry.grid(row=4, column=1, padx=5, pady=2, sticky="w")
 
-        ttk.Label(file_form_frame, text="Objet :").grid(row=3, column=2, padx=5, pady=2, sticky="w")
+        ttk.Label(file_form_frame, text="Objet :").grid(row=5, column=0, padx=5, pady=2, sticky="w")
         self.objet_var = tk.StringVar()
         self.objet_entry = ttk.Entry(file_form_frame, textvariable=self.objet_var, width=20)
-        self.objet_entry.grid(row=3, column=3, padx=5, pady=2)
+        self.objet_entry.grid(row=5, column=1, padx=5, pady=2, sticky="w")
 
-        ttk.Label(file_form_frame, text="Version :").grid(row=3, column=4, padx=5, pady=2, sticky="w")
+        ttk.Label(file_form_frame, text="Version :").grid(row=6, column=0, padx=5, pady=2, sticky="w")
         self.version_var = tk.StringVar(value="V1")
         self.version_entry = ttk.Entry(file_form_frame, textvariable=self.version_var, width=10)
-        self.version_entry.grid(row=3, column=5, padx=5, pady=2)
+        self.version_entry.grid(row=6, column=1, padx=5, pady=2, sticky="w")
 
         file_button_frame = ttk.Frame(file_form_frame)
-        file_button_frame.grid(row=4, column=0, columnspan=6, pady=5)
+        file_button_frame.grid(row=7, column=0, columnspan=3, pady=5)
         ttk.Button(file_button_frame, text="Ajouter pièce", style="Add.TButton", command=self.add_file).pack(side="left", padx=5)
         ttk.Button(file_button_frame, text="Modifier pièce", style="Modify.TButton", command=self.modify_file).pack(side="left", padx=5)
         ttk.Button(file_button_frame, text="Vider formulaire", style="Clear.TButton", command=self.clear_file_form).pack(side="left", padx=5)
@@ -189,6 +208,18 @@ class LibraryManager:
         self.current_selected_folder = None
         self.toggle_file_fields()  # Initialiser l'état des champs
         self.refresh_folder_list()
+
+    def load_initial_data(self):
+        """Charge les dossiers et fichiers initiaux depuis la base de données dans les structures en mémoire."""
+        # Charger les dossiers
+        self.cursor.execute("SELECT DISTINCT year, category, archives, project, notes FROM library WHERE file_path != '' OR title = '[Dossier]'")
+        self.all_folders = [(row[0], row[1], row[2] or "", row[3], row[4] or "") for row in self.cursor.fetchall()]
+        print(f"Loaded {len(self.all_folders)} folders into self.all_folders")
+
+        # Charger les fichiers
+        self.cursor.execute("SELECT id, title, year, category, archives, project FROM library WHERE file_path != ''")
+        self.all_files = [(row[0], row[1], row[2], row[3], row[4] or "", row[5]) for row in self.cursor.fetchall()]
+        print(f"Loaded {len(self.all_files)} files into self.all_files")
 
     def init_nomenclatures_file(self):
         if not os.path.exists(self.nomenclatures_file):
@@ -344,6 +375,7 @@ class LibraryManager:
             title TEXT NOT NULL,
             year TEXT,
             category TEXT,
+            archives TEXT,
             project TEXT,
             site TEXT,
             nomenclature TEXT,
@@ -360,6 +392,8 @@ class LibraryManager:
             self.cursor.execute("UPDATE library SET year = ? WHERE year IS NULL", (str(datetime.now().year),))
         if 'category' not in columns:
             self.cursor.execute("ALTER TABLE library ADD COLUMN category TEXT")
+        if 'archives' not in columns:
+            self.cursor.execute("ALTER TABLE library ADD COLUMN archives TEXT")
         if 'project' not in columns:
             self.cursor.execute("ALTER TABLE library ADD COLUMN project TEXT")
         if 'site' not in columns:
@@ -377,14 +411,50 @@ class LibraryManager:
         if 'notes' not in columns:
             self.cursor.execute("ALTER TABLE library ADD COLUMN notes TEXT")
         self.conn.commit()
+        # Migrer les chemins après l'initialisation du schéma
+        self.migrate_file_paths()
+
+    def migrate_file_paths(self):
+        """Migre les chemins des fichiers existants vers la nouvelle structure."""
+        self.cursor.execute("SELECT id, year, category, archives, project, title, file_path FROM library WHERE file_path != ''")
+        files = self.cursor.fetchall()
+        for file_id, year, category, archives, project, title, file_path in files:
+            # Chemin attendu : year/category/[archives/]project/title
+            path_components = [str(year), category]
+            if archives:
+                path_components.append(archives)
+            path_components.append(project)
+            path_components.append(title)
+            expected_path = os.path.join(*path_components)
+            expected_path = expected_path.replace('\\', '/')
+            
+            # Si le chemin actuel diffère, mettre à jour
+            if file_path != expected_path:
+                print(f"Migration du chemin pour l'ID {file_id} : {file_path} -> {expected_path}")
+                self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_path, file_id))
+                # Vérifier si le fichier existe et le déplacer si nécessaire
+                old_full_path = os.path.normpath(os.path.join(self.files_dir, file_path))
+                new_full_path = os.path.normpath(os.path.join(self.files_dir, expected_path))
+                if os.path.exists(old_full_path) and not os.path.exists(new_full_path):
+                    try:
+                        os.makedirs(os.path.dirname(new_full_path), exist_ok=True)
+                        shutil.move(old_full_path, new_full_path)
+                    except Exception as e:
+                        print(f"Erreur lors du déplacement du fichier pour l'ID {file_id} : {e}")
+        self.conn.commit()
 
     def clean_file_paths(self):
         """Nettoie les chemins dans la base de données en supprimant les redondances."""
-        self.cursor.execute("SELECT id, year, category, project, title, file_path FROM library WHERE file_path != ''")
+        self.cursor.execute("SELECT id, year, category, archives, project, title, file_path FROM library WHERE file_path != ''")
         files = self.cursor.fetchall()
-        for file_id, year, category, project, title, file_path in files:
-            # Construire le chemin attendu : year/category/project/title
-            expected_path = os.path.join(str(year), category, project, title)
+        for file_id, year, category, archives, project, title, file_path in files:
+            # Construire le chemin attendu : year/category/[archives/]project/title
+            path_components = [str(year), category]
+            if archives:
+                path_components.append(archives)
+            path_components.append(project)
+            path_components.append(title)
+            expected_path = os.path.join(*path_components)
             expected_path = expected_path.replace('\\', '/')
 
             # Vérifier si le chemin stocké contient une redondance
@@ -396,13 +466,20 @@ class LibraryManager:
 
     def verify_and_fix_file_paths(self):
         """Vérifie l'existence des fichiers et corrige les chemins dans la base si nécessaire."""
-        self.cursor.execute("SELECT id, year, category, project, title, file_path FROM library WHERE file_path != ''")
+        if not messagebox.askyesno("Confirmation", "Voulez-vous vérifier et corriger les chemins des fichiers ?"):
+            return
+        self.cursor.execute("SELECT id, year, category, archives, project, title, file_path FROM library WHERE file_path != ''")
         files = self.cursor.fetchall()
         corrected = 0
         missing = 0
-        for file_id, year, category, project, title, file_path in files:
+        for file_id, year, category, archives, project, title, file_path in files:
             # Construire le chemin attendu
-            expected_relative_path = os.path.join(str(year), category, project, title)
+            path_components = [str(year), category]
+            if archives:
+                path_components.append(archives)
+            path_components.append(project)
+            path_components.append(title)
+            expected_relative_path = os.path.join(*path_components)
             expected_relative_path = expected_relative_path.replace('\\', '/')
             expected_full_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
 
@@ -432,19 +509,21 @@ class LibraryManager:
         if not selected:
             self.current_selected_folder = None
             self.clear_folder_form()
-            self.load_files(None)
+            self.load_files()
             return
-        year, category, project, notes = self.folder_tree.item(selected[0])["values"]
-        self.current_selected_folder = (year, category, project, notes)
+        year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
+        self.current_selected_folder = (year, category, archives, project, notes)
         self.folder_year_var.set(year)
         self.folder_category_var.set(category)
+        self.folder_archives_var.set(archives or "")
         self.folder_project_var.set(project)
         self.folder_notes_var.set(notes or "")
-        self.load_files(event)
+        self.load_files()
 
     def add_folder(self):
         year = self.folder_year_var.get()
         category = self.folder_category_var.get()
+        archives = self.folder_archives_var.get()
         project = self.folder_project_var.get()
         notes = self.folder_notes_var.get()
 
@@ -452,17 +531,23 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Les champs Année, Catégorie et Projet doivent être remplis.")
             return
 
-        folder_path = os.path.normpath(os.path.join(self.files_dir, str(year), category, project))
+        path_components = [self.files_dir, str(year), category]
+        if archives:
+            path_components.append(archives)
+        path_components.append(project)
+        folder_path = os.path.normpath(os.path.join(*path_components))
         try:
             os.makedirs(folder_path, exist_ok=True)
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de créer le dossier : {e}")
             return
 
-        self.cursor.execute('''INSERT INTO library (title, year, category, project, notes, file_path)
-                            VALUES (?, ?, ?, ?, ?, ?)''',
-                           ("[Dossier]", year, category, project, notes, ""))
+        self.cursor.execute('''INSERT INTO library (title, year, category, archives, project, notes, file_path)
+                            VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                           ("[Dossier]", year, category, archives, project, notes, ""))
         self.conn.commit()
+        self.all_folders.append((year, category, archives or "", project, notes or ""))
+        print(f"Added folder to self.all_folders: {year}/{category}/{archives}/{project}")
         self.refresh_folder_list()
         self.clear_folder_form()
 
@@ -473,6 +558,7 @@ class LibraryManager:
 
         new_year = self.folder_year_var.get()
         new_category = self.folder_category_var.get()
+        new_archives = self.folder_archives_var.get()
         new_project = self.folder_project_var.get()
         new_notes = self.folder_notes_var.get()
 
@@ -480,63 +566,160 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Les champs Année, Catégorie et Projet doivent être remplis.")
             return
 
-        old_year, old_category, old_project, old_notes = self.current_selected_folder
+        old_year, old_category, old_archives, old_project, old_notes = self.current_selected_folder
 
-        if (old_year, old_category, old_project, old_notes) == (new_year, new_category, new_project, new_notes):
+        if (old_year, old_category, old_archives, old_project, old_notes) == (new_year, new_category, new_archives, new_project, new_notes):
             messagebox.showinfo("Information", "Aucune modification détectée.")
             return
 
+        if not messagebox.askyesno("Confirmation", "Voulez-vous vraiment modifier ce dossier ?"):
+            return
+
         # Vérifier si le nouveau dossier existe déjà (sauf si c'est le même dossier)
-        self.cursor.execute("SELECT 1 FROM library WHERE year=? AND category=? AND project=? AND (year != ? OR category != ? OR project != ?)",
-                           (new_year, new_category, new_project, old_year, old_category, old_project))
+        self.cursor.execute("SELECT 1 FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=? AND (year != ? OR category != ? OR archives != ? OR project != ?)",
+                           (new_year, new_category, new_archives or None, new_project, old_year, old_category, old_archives or None, old_project))
         if self.cursor.fetchone():
             messagebox.showerror("Erreur", "Ce dossier existe déjà.")
             return
 
         # Déplacer le dossier physique
-        old_folder_path = os.path.normpath(os.path.join(self.files_dir, str(old_year), old_category, old_project))
-        new_folder_path = os.path.normpath(os.path.join(self.files_dir, str(new_year), new_category, new_project))
+        old_path_components = [self.files_dir, str(old_year), old_category]
+        if old_archives:
+            old_path_components.append(old_archives)
+        old_path_components.append(old_project)
+        old_folder_path = os.path.normpath(os.path.join(*old_path_components))
+
+        new_path_components = [self.files_dir, str(new_year), new_category]
+        if new_archives:
+            new_path_components.append(new_archives)
+        new_path_components.append(new_project)
+        new_folder_path = os.path.normpath(os.path.join(*new_path_components))
+
         if os.path.exists(old_folder_path):
             try:
+                os.makedirs(os.path.dirname(new_folder_path), exist_ok=True)
                 shutil.move(old_folder_path, new_folder_path)
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible de déplacer le dossier : {e}")
                 return
 
         # Mettre à jour la base de données
-        self.cursor.execute('''UPDATE library SET year=?, category=?, project=?, notes=? 
-                            WHERE year=? AND category=? AND project=?''',
-                           (new_year, new_category, new_project, new_notes, old_year, old_category, old_project))
+        self.cursor.execute('''UPDATE library SET year=?, category=?, archives=?, project=?, notes=? 
+                            WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=?''',
+                           (new_year, new_category, new_archives or None, new_project, new_notes, old_year, old_category, old_archives or None, old_project))
         
         # Mettre à jour les chemins des fichiers
-        self.cursor.execute("SELECT id, file_path FROM library WHERE year=? AND category=? AND project=? AND file_path != ''",
-                           (new_year, new_category, new_project))
+        self.cursor.execute("SELECT id, file_path FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=? AND file_path != ''",
+                           (new_year, new_category, new_archives or None, new_project))
         for file_id, file_path in self.cursor.fetchall():
             file_name = os.path.basename(file_path)
-            new_relative_path = os.path.join(str(new_year), new_category, new_project, file_name)
+            path_components = [str(new_year), new_category]
+            if new_archives:
+                path_components.append(new_archives)
+            path_components.append(new_project)
+            path_components.append(file_name)
+            new_relative_path = os.path.join(*path_components)
             new_relative_path = new_relative_path.replace('\\', '/')
             self.cursor.execute("UPDATE library SET file_path=? WHERE id=?", (new_relative_path, file_id))
         
         self.conn.commit()
-        
+
+        # Mettre à jour self.all_folders
+        self.all_folders = [f for f in self.all_folders if f != (old_year, old_category, old_archives, old_project, old_notes)]
+        self.all_folders.append((new_year, new_category, new_archives or "", new_project, new_notes or ""))
+
+        # Mettre à jour self.all_files
+        for i, (file_id, title, f_year, f_category, f_archives, f_project) in enumerate(self.all_files):
+            if (f_year, f_category, f_archives, f_project) == (old_year, old_category, old_archives, old_project):
+                self.all_files[i] = (file_id, title, new_year, new_category, new_archives or "", new_project)
+
+        # Mettre à jour la sélection actuelle
+        self.current_selected_folder = (new_year, new_category, new_archives or "", new_project, new_notes or "")
+        self.current_folder = self.current_selected_folder
         self.refresh_folder_list()
         self.clear_folder_form()
-        self.load_files(None)
+        self.load_files()
 
     def delete_folder(self):
         selected = self.folder_tree.selection()
         if not selected:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier à supprimer.")
             return
-        year, category, project, notes = self.folder_tree.item(selected[0])["values"]
+        year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
         
         # Compter le nombre de pièces dans le dossier
-        self.cursor.execute("SELECT COUNT(*) FROM library WHERE year=? AND category=? AND project=? AND file_path != ''", (year, category, project))
-        num_files = self.cursor.fetchone()[0]
+        num_files = sum(1 for f in self.all_files if f[2] == year and f[3] == category and f[4] == (archives or "") and f[5] == project)
         
-        if messagebox.askyesno("Confirmation", f"Supprimer le dossier {year}/{category}/{project} et ses {num_files} pièce(s) ?"):
-            folder_path = os.path.normpath(os.path.join(self.files_dir, str(year), category, project))
-            self.cursor.execute("SELECT file_path FROM library WHERE year=? AND category=? AND project=?", (year, category, project))
+        if not messagebox.askyesno("Confirmation", f"Supprimer le dossier {year}/{category}/{archives or ''}/{project} et ses {num_files} pièce(s) ?"):
+            return
+
+        path_components = [self.files_dir, str(year), category]
+        if archives:
+            path_components.append(archives)
+        path_components.append(project)
+        folder_path = os.path.normpath(os.path.join(*path_components))
+        self.cursor.execute("SELECT file_path FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=?", 
+                           (year, category, archives or None, project))
+        for row in self.cursor.fetchall():
+            file_path = row[0]
+            if file_path:
+                full_path = os.path.normpath(os.path.join(self.files_dir, file_path))
+                try:
+                    if os.path.exists(full_path):
+                        os.remove(full_path)
+                except Exception as e:
+                    pass
+        try:
+            if os.path.exists(folder_path):
+                shutil.rmtree(folder_path)
+        except Exception as e:
+            pass
+        self.cursor.execute("DELETE FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=?", 
+                           (year, category, archives or None, project))
+        self.conn.commit()
+
+        # Mettre à jour self.all_folders et self.all_files
+        self.all_folders = [f for f in self.all_folders if f != (year, category, archives or "", project, notes or "")]
+        self.all_files = [f for f in self.all_files if not (f[2] == year and f[3] == category and f[4] == (archives or "") and f[5] == project)]
+
+        # Vérifier si la catégorie est vide
+        self.cursor.execute("SELECT 1 FROM library WHERE category=?", (category,))
+        if not self.cursor.fetchone():
+            messagebox.showinfo("Information", f"La catégorie '{category}' est vide et a été supprimée.")
+            for year_dir in os.listdir(self.files_dir):
+                category_path = os.path.normpath(os.path.join(self.files_dir, year_dir, category))
+                try:
+                    if os.path.exists(category_path):
+                        shutil.rmtree(category_path)
+                except Exception as e:
+                    pass
+            
+        self.refresh_folder_list()
+        self.clear_folder_form()
+        self.load_files()
+
+    def delete_category(self):
+        if not self.current_selected_folder:
+            messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier pour supprimer sa catégorie.")
+            return
+        _, category, _, _, _ = self.current_selected_folder
+        
+        # Compter le nombre de dossiers et de pièces dans la catégorie
+        num_folders = sum(1 for f in self.all_folders if f[1] == category)
+        num_files = sum(1 for f in self.all_files if f[3] == category)
+
+        if not messagebox.askyesno("Confirmation", f"Supprimer la catégorie '{category}' ? Cela supprimera {num_folders} dossier(s) et {num_files} pièce(s)."):
+            return
+
+        self.cursor.execute("SELECT DISTINCT year, archives, project FROM library WHERE category=?", (category,))
+        for year, archives, project in self.cursor.fetchall():
+            path_components = [self.files_dir, str(year), category]
+            if archives:
+                path_components.append(archives)
+            path_components.append(project)
+            folder_path = os.path.normpath(os.path.join(*path_components))
+            self.cursor.execute("SELECT file_path FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=?", 
+                               (year, category, archives or None, project))
             for row in self.cursor.fetchall():
                 file_path = row[0]
                 if file_path:
@@ -551,68 +734,23 @@ class LibraryManager:
                     shutil.rmtree(folder_path)
             except Exception as e:
                 pass
-            self.cursor.execute("DELETE FROM library WHERE year=? AND category=? AND project=?", (year, category, project))
-            
-            # Vérifier si la catégorie est vide
-            self.cursor.execute("SELECT 1 FROM library WHERE category=?", (category,))
-            if not self.cursor.fetchone():
-                messagebox.showinfo("Information", f"La catégorie '{category}' est vide et a été supprimée.")
-                for year_dir in os.listdir(self.files_dir):
-                    category_path = os.path.normpath(os.path.join(self.files_dir, year_dir, category))
-                    try:
-                        if os.path.exists(category_path):
-                            shutil.rmtree(category_path)
-                    except Exception as e:
-                        pass
-            
-            self.conn.commit()
-            self.refresh_folder_list()
-            self.clear_folder_form()
-            self.load_files(None)
+        for year_dir in os.listdir(self.files_dir):
+            category_path = os.path.normpath(os.path.join(self.files_dir, year_dir, category))
+            try:
+                if os.path.exists(category_path):
+                    shutil.rmtree(category_path)
+            except Exception as e:
+                pass
+        self.cursor.execute("DELETE FROM library WHERE category=?", (category,))
+        self.conn.commit()
 
-    def delete_category(self):
-        if not self.current_selected_folder:
-            messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier pour supprimer sa catégorie.")
-            return
-        _, category, _, _ = self.current_selected_folder
-        
-        # Compter le nombre de dossiers et de pièces dans la catégorie
-        self.cursor.execute("SELECT COUNT(DISTINCT year, project) FROM library WHERE category=?", (category,))
-        num_folders = self.cursor.fetchone()[0]
-        self.cursor.execute("SELECT COUNT(*) FROM library WHERE category=? AND file_path != ''", (category,))
-        num_files = self.cursor.fetchone()[0]
+        # Mettre à jour self.all_folders et self.all_files
+        self.all_folders = [f for f in self.all_folders if f[1] != category]
+        self.all_files = [f for f in self.all_files if f[3] != category]
 
-        if messagebox.askyesno("Confirmation", f"Supprimer la catégorie '{category}' ? Cela supprimera {num_folders} dossier(s) et {num_files} pièce(s)."):
-            self.cursor.execute("SELECT DISTINCT year, project FROM library WHERE category=?", (category,))
-            for year, project in self.cursor.fetchall():
-                folder_path = os.path.normpath(os.path.join(self.files_dir, str(year), category, project))
-                self.cursor.execute("SELECT file_path FROM library WHERE year=? AND category=? AND project=?", (year, category, project))
-                for row in self.cursor.fetchall():
-                    file_path = row[0]
-                    if file_path:
-                        full_path = os.path.normpath(os.path.join(self.files_dir, file_path))
-                        try:
-                            if os.path.exists(full_path):
-                                os.remove(full_path)
-                        except Exception as e:
-                            pass
-                try:
-                    if os.path.exists(folder_path):
-                        shutil.rmtree(folder_path)
-                except Exception as e:
-                    pass
-            for year_dir in os.listdir(self.files_dir):
-                category_path = os.path.normpath(os.path.join(self.files_dir, year_dir, category))
-                try:
-                    if os.path.exists(category_path):
-                        shutil.rmtree(category_path)
-                except Exception as e:
-                    pass
-            self.cursor.execute("DELETE FROM library WHERE category=?", (category,))
-            self.conn.commit()
-            self.refresh_folder_list()
-            self.clear_folder_form()
-            self.load_files(None)
+        self.refresh_folder_list()
+        self.clear_folder_form()
+        self.load_files()
 
     def add_file(self):
         selected = self.folder_tree.selection()
@@ -620,7 +758,8 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier dans le premier Treeview.")
             return
 
-        year, category, project, notes = self.folder_tree.item(selected[0])["values"]
+        year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
+        print(f"Adding file to folder: {year}/{category}/{archives}/{project}")
         file_path = filedialog.askopenfilename(
             filetypes=[("Tous les fichiers", "*.*")],
             title="Sélectionner un fichier"
@@ -630,6 +769,9 @@ class LibraryManager:
 
         keep_name = self.keep_name_var.get()
         move_file = self.move_file_var.get()
+        if move_file:
+            if not messagebox.askyesno("Confirmation", "Voulez-vous vraiment déplacer (couper) ce fichier ?"):
+                return
         if keep_name:
             title = os.path.basename(file_path)
             site = None
@@ -649,7 +791,11 @@ class LibraryManager:
             title = f"{year}-{site}-{nomenclature}-{emetteur}-{objet}-{version}{os.path.splitext(file_path)[1]}"
 
         # Construire le chemin de destination
-        relative_dest_dir = os.path.join(str(year), category, project)
+        path_components = [str(year), category]
+        if archives:
+            path_components.append(archives)
+        path_components.append(project)
+        relative_dest_dir = os.path.join(*path_components)
         relative_dest_dir = relative_dest_dir.replace('\\', '/')
         dest_dir = os.path.normpath(os.path.join(self.files_dir, relative_dest_dir))
         try:
@@ -674,21 +820,51 @@ class LibraryManager:
             messagebox.showerror("Erreur", f"Impossible de {'déplacer' if move_file else 'copier'} le fichier : {e}")
             return
 
-        self.cursor.execute('''INSERT INTO library (title, year, category, project, site, nomenclature, emetteur, objet, version, file_path, notes)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                           (title, year, category, project, site, nomenclature, emetteur, objet, version, relative_dest_path, notes))
+        self.cursor.execute('''INSERT INTO library (title, year, category, archives, project, site, nomenclature, emetteur, objet, version, file_path, notes)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                           (title, year, category, archives, project, site, nomenclature, emetteur, objet, version, relative_dest_path, notes))
         self.conn.commit()
+
+        # Récupérer l'ID du fichier inséré
+        self.cursor.execute("SELECT last_insert_rowid()")
+        file_id = self.cursor.fetchone()[0]
+
+        # Ajouter le fichier à self.all_files
+        self.all_files.append((file_id, title, year, category, archives or "", project))
+        print(f"Added file to self.all_files: ID={file_id}, Title={title}")
+
+        # Mettre à jour la sélection actuelle
+        self.current_selected_folder = (year, category, archives or "", project, notes or "")
+        self.current_folder = self.current_selected_folder
+        print(f"Set current_selected_folder: {self.current_selected_folder}")
+
+        # Rafraîchir la liste des dossiers
         self.refresh_folder_list()
 
-        class FakeEvent:
-            pass
-        fake_event = FakeEvent()
-        self.load_files(fake_event)
-        self.filter_files()
+        # Sélectionner explicitement le dossier dans le Treeview
+        for item in self.folder_tree.get_children():
+            values = self.folder_tree.item(item)["values"]
+            if (values[0] == year and 
+                values[1] == category and 
+                values[2] == (archives or "") and 
+                values[3] == project):
+                self.folder_tree.selection_set(item)
+                self.folder_tree.focus(item)
+                self.folder_tree.see(item)
+                print(f"Selected folder in folder_tree: {values}")
+                break
+        else:
+            print("Warning: Could not re-select folder in folder_tree")
+
+        # Recharger les fichiers pour le dossier sélectionné
+        self.load_files()
 
     def modify_file(self):
         if not self.current_file_id:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce à modifier.")
+            return
+
+        if not messagebox.askyesno("Confirmation", "Voulez-vous vraiment modifier cette pièce ?"):
             return
 
         selected = self.folder_tree.selection()
@@ -696,7 +872,7 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier dans le premier Treeview.")
             return
 
-        year, category, project, notes = self.folder_tree.item(selected[0])["values"]
+        year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
         keep_name = self.keep_name_var.get()
         if keep_name:
             self.cursor.execute("SELECT title FROM library WHERE id=?", (self.current_file_id,))
@@ -724,7 +900,11 @@ class LibraryManager:
         old_path = os.path.normpath(os.path.join(self.files_dir, old_relative_path))
 
         # Construire le nouveau chemin
-        relative_dest_dir = os.path.join(str(year), category, project)
+        path_components = [str(year), category]
+        if archives:
+            path_components.append(archives)
+        path_components.append(project)
+        relative_dest_dir = os.path.join(*path_components)
         relative_dest_dir = relative_dest_dir.replace('\\', '/')
         dest_dir = os.path.normpath(os.path.join(self.files_dir, relative_dest_dir))
         try:
@@ -746,17 +926,22 @@ class LibraryManager:
                 messagebox.showerror("Erreur", f"Impossible de renommer/déplacer le fichier : {e}")
                 return
 
-        self.cursor.execute('''UPDATE library SET title=?, year=?, category=?, project=?, site=?, nomenclature=?, emetteur=?, objet=?, version=?, file_path=?, notes=?
+        self.cursor.execute('''UPDATE library SET title=?, year=?, category=?, archives=?, project=?, site=?, nomenclature=?, emetteur=?, objet=?, version=?, file_path=?, notes=?
                             WHERE id=?''',
-                           (title, year, category, project, site, nomenclature, emetteur, objet, version, new_relative_path, notes, self.current_file_id))
+                           (title, year, category, archives, project, site, nomenclature, emetteur, objet, version, new_relative_path, notes, self.current_file_id))
         self.conn.commit()
-        self.refresh_folder_list()
 
-        class FakeEvent:
-            pass
-        fake_event = FakeEvent()
-        self.load_files(fake_event)
-        self.filter_files()
+        # Mettre à jour self.all_files
+        for i, (file_id, _, f_year, f_category, f_archives, f_project) in enumerate(self.all_files):
+            if file_id == self.current_file_id:
+                self.all_files[i] = (file_id, title, year, category, archives or "", project)
+                print(f"Updated file in self.all_files: ID={file_id}, Title={title}")
+                break
+
+        self.current_selected_folder = (year, category, archives or "", project, notes or "")
+        self.current_folder = self.current_selected_folder
+        self.refresh_folder_list()
+        self.load_files()
 
     def delete_file(self):
         selected = self.file_tree.selection()
@@ -766,21 +951,26 @@ class LibraryManager:
         file_id = self.file_tree.item(selected[0])["values"][0]
         self.cursor.execute("SELECT title FROM library WHERE id=?", (file_id,))
         file_title = self.cursor.fetchone()[0]
-        if messagebox.askyesno("Confirmation", f"Supprimer la pièce '{file_title}' de la bibliothèque ?"):
-            self.cursor.execute("SELECT file_path FROM library WHERE id=?", (file_id,))
-            relative_path = self.cursor.fetchone()[0]
-            file_path = os.path.normpath(os.path.join(self.files_dir, relative_path))
-            try:
-                if os.path.exists(file_path):
-                    os.remove(file_path)
-            except Exception as e:
-                pass
-            self.cursor.execute("DELETE FROM library WHERE id=?", (file_id,))
-            self.conn.commit()
-            self.refresh_folder_list()
-            self.clear_file_form()
-            self.load_files(None)
-            self.filter_files()
+        if not messagebox.askyesno("Confirmation", f"Supprimer la pièce '{file_title}' de la bibliothèque ?"):
+            return
+        self.cursor.execute("SELECT file_path FROM library WHERE id=?", (file_id,))
+        relative_path = self.cursor.fetchone()[0]
+        file_path = os.path.normpath(os.path.join(self.files_dir, relative_path))
+        try:
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        except Exception as e:
+            pass
+        self.cursor.execute("DELETE FROM library WHERE id=?", (file_id,))
+        self.conn.commit()
+
+        # Mettre à jour self.all_files
+        self.all_files = [f for f in self.all_files if f[0] != file_id]
+        print(f"Deleted file from self.all_files: ID={file_id}, Title={file_title}")
+
+        self.refresh_folder_list()
+        self.clear_file_form()
+        self.load_files()
 
     def open_file(self):
         selected = self.file_tree.selection()
@@ -788,17 +978,21 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce à ouvrir.")
             return
         file_id = self.file_tree.item(selected[0])["values"][0]
-        # Récupérer les informations de l'entrée pour reconstruire le chemin
-        self.cursor.execute("SELECT year, category, project, title, file_path FROM library WHERE id=?", (file_id,))
+        self.cursor.execute("SELECT year, category, archives, project, title, file_path FROM library WHERE id=?", (file_id,))
         result = self.cursor.fetchone()
         if not result:
             messagebox.showerror("Erreur", f"Aucune entrée trouvée pour l'ID {file_id}.")
             return
         
-        year, category, project, title, stored_file_path = result
+        year, category, archives, project, title, stored_file_path = result
 
-        # Construire le chemin attendu en utilisant year, category, project, et title
-        expected_relative_path = os.path.join(str(year), category, project, title)
+        # Construire le chemin attendu
+        path_components = [str(year), category]
+        if archives:
+            path_components.append(archives)
+        path_components.append(project)
+        path_components.append(title)
+        expected_relative_path = os.path.join(*path_components)
         expected_relative_path = expected_relative_path.replace('\\', '/')
         expected_file_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
 
@@ -845,16 +1039,21 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce pour ouvrir son emplacement.")
             return
         file_id = self.file_tree.item(selected[0])["values"][0]
-        self.cursor.execute("SELECT year, category, project, title, file_path FROM library WHERE id=?", (file_id,))
+        self.cursor.execute("SELECT year, category, archives, project, title, file_path FROM library WHERE id=?", (file_id,))
         result = self.cursor.fetchone()
         if not result:
             messagebox.showerror("Erreur", f"Aucune entrée trouvée pour l'ID {file_id}.")
             return
         
-        year, category, project, title, stored_file_path = result
+        year, category, archives, project, title, stored_file_path = result
 
         # Construire le chemin attendu
-        expected_relative_path = os.path.join(str(year), category, project, title)
+        path_components = [str(year), category]
+        if archives:
+            path_components.append(archives)
+        path_components.append(project)
+        path_components.append(title)
+        expected_relative_path = os.path.join(*path_components)
         expected_relative_path = expected_relative_path.replace('\\', '/')
         expected_file_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
 
@@ -904,6 +1103,7 @@ class LibraryManager:
         self.current_selected_folder = None
         self.folder_year_var.set(str(datetime.now().year))
         self.folder_category_var.set("")
+        self.folder_archives_var.set("")
         self.folder_project_var.set("")
         self.folder_notes_var.set("")
 
@@ -933,21 +1133,18 @@ class LibraryManager:
             selected_iid = selected[0]
             selected_values = self.folder_tree.item(selected_iid)["values"]
 
-        # Charger toutes les données des dossiers une fois
-        query = "SELECT DISTINCT year, category, project, notes FROM library WHERE file_path != '' OR title = '[Dossier]'"
-        self.cursor.execute(query)
-        self.all_folders = self.cursor.fetchall()
-
         # Filtrer les données en mémoire avec recherche partielle
         year_filter = self.year_filter_var.get().strip().lower()
         category_filter = self.category_filter_var.get().strip().lower()
+        archives_filter = self.archives_filter_var.get().strip().lower()
         project_filter = self.project_filter_var.get().strip().lower()
 
         filtered_folders = [
             row for row in self.all_folders
             if (not year_filter or year_filter in str(row[0]).lower())
             and (not category_filter or category_filter in str(row[1]).lower())
-            and (not project_filter or project_filter in str(row[2]).lower())
+            and (not archives_filter or archives_filter in str(row[2] or "").lower())
+            and (not project_filter or project_filter in str(row[3]).lower())
         ]
 
         # Vider le Treeview
@@ -955,28 +1152,35 @@ class LibraryManager:
             self.folder_tree.delete(item)
 
         # Appliquer le tri sur les données filtrées
-        col_index = {"Year": 0, "Category": 1, "Project": 2, "Notes": 3}
+        col_index = {"Year": 0, "Category": 1, "Archives": 2, "Project": 3, "Notes": 4}
         sort_index = col_index[self.sort_column_name]
         filtered_folders.sort(
             key=lambda x: str(x[sort_index] or "").lower(),
             reverse=self.sort_reverse
         )
 
-        # Insérer les données filtrées et triées dans le Treeview
+        # Insérer les données filtrées et triées dans le Treeview avec couleurs alternées
         items = []
-        for row in filtered_folders:
-            normalized_row = (str(row[0]), str(row[1]), str(row[2]), str(row[3] or ""))
-            item = self.folder_tree.insert("", tk.END, values=normalized_row)
+        for index, row in enumerate(filtered_folders):
+            # Normaliser les valeurs, en particulier archives
+            normalized_row = (str(row[0]), str(row[1]), str(row[2] or ""), str(row[3]), str(row[4] or ""))
+            tag = "OddRow" if index % 2 else "EvenRow"
+            item = self.folder_tree.insert("", tk.END, values=normalized_row, tags=(tag,))
             items.append((item, normalized_row))
 
         # Restaurer la sélection
-        if selected_values:
-            normalized_selected = (str(selected_values[0]), str(selected_values[1]), str(selected_values[2]), str(selected_values[3] or ""))
+        if selected_values and self.current_selected_folder:
+            normalized_selected = (
+                str(self.current_selected_folder[0]), 
+                str(self.current_selected_folder[1]), 
+                str(self.current_selected_folder[2] or ""), 
+                str(self.current_selected_folder[3]), 
+                str(self.current_selected_folder[4] or "")
+            )
             found = False
             for item, values in items:
                 if values == normalized_selected:
                     self.folder_tree.selection_set(item)
-                    self.current_selected_folder = values
                     self.folder_tree.see(item)
                     found = True
                     break
@@ -985,35 +1189,62 @@ class LibraryManager:
                     first_item, first_values = items[0]
                     self.folder_tree.selection_set(first_item)
                     self.current_selected_folder = first_values
+                    self.current_folder = first_values
                     self.folder_tree.see(first_item)
 
     def filter_folders(self, *args):
         self.refresh_folder_list()
 
-    def load_files(self, event):
+    def load_files(self):
+        """Charge les fichiers du dossier sélectionné dans le Treeview des pièces en utilisant self.all_files."""
         for item in self.file_tree.get_children():
             self.file_tree.delete(item)
-        selected = self.folder_tree.selection()
-        if not selected:
+        
+        if not self.current_selected_folder:
             self.current_folder = None
+            print("No folder selected, clearing file_tree")
             return
-        self.current_folder = self.folder_tree.item(selected[0])["values"]
-        year, category, project, notes = self.current_folder
-        query = "SELECT id, title FROM library WHERE year=? AND category=? AND project=? AND file_path != ''"
-        self.cursor.execute(query, (year, category, project))
-        for row in self.cursor.fetchall():
-            self.file_tree.insert("", tk.END, values=row)
+        
+        self.current_folder = self.current_selected_folder
+        year, category, archives, project, notes = self.current_folder
+        print(f"Loading files for folder: {year}/{category}/{archives}/{project}")
+
+        # Filtrer les fichiers correspondant au dossier sélectionné
+        matching_files = [
+            (file_id, title) for file_id, title, f_year, f_category, f_archives, f_project in self.all_files
+            if f_year == year and f_category == category and f_archives == (archives or "") and f_project == project
+        ]
+
+        print(f"Found {len(matching_files)} files for folder: {matching_files}")
+
+        # Peupler le Treeview
+        for index, (file_id, title) in enumerate(matching_files):
+            tag = "OddRow" if index % 2 else "EvenRow"
+            self.file_tree.insert("", tk.END, values=(file_id, title), tags=(tag,))
 
     def filter_files(self, event=None):
+        """Filtre les fichiers dans le Treeview des pièces en fonction du terme de recherche."""
         for item in self.file_tree.get_children():
             self.file_tree.delete(item)
+        
         if not self.current_folder:
+            print("No folder selected for filtering files")
             return
+        
         search_term = self.search_var.get().lower()
-        year, category, project, notes = self.current_folder
-        query = '''SELECT id, title FROM library 
-                   WHERE year=? AND category=? AND project=? AND file_path != ''
-                   AND LOWER(title) LIKE ?'''
-        self.cursor.execute(query, (year, category, project, f"%{search_term}%"))
-        for row in self.cursor.fetchall():
-            self.file_tree.insert("", tk.END, values=row)
+        year, category, archives, project, notes = self.current_folder
+        print(f"Filtering files for folder: {year}/{category}/{archives}/{project}, search_term: {search_term}")
+
+        # Filtrer les fichiers correspondant au dossier et au terme de recherche
+        matching_files = [
+            (file_id, title) for file_id, title, f_year, f_category, f_archives, f_project in self.all_files
+            if f_year == year and f_category == category and f_archives == (archives or "") and f_project == project
+            and search_term in title.lower()
+        ]
+
+        print(f"Found {len(matching_files)} filtered files: {matching_files}")
+
+        # Peupler le Treeview
+        for index, (file_id, title) in enumerate(matching_files):
+            tag = "OddRow" if index % 2 else "EvenRow"
+            self.file_tree.insert("", tk.END, values=(file_id, title), tags=(tag,))
