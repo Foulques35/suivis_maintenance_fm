@@ -45,7 +45,7 @@ class LibraryManager:
 
         # Stocker toutes les données des dossiers et fichiers
         self.all_folders = []
-        self.all_files = []  # New: Store file metadata (id, title, year, category, archives, project)
+        self.all_files = []  # Store file metadata (id, title, year, category, archives, project)
 
         # Charger les données initiales
         self.load_initial_data()
@@ -80,10 +80,10 @@ class LibraryManager:
         ttk.Entry(filter_frame, textvariable=self.archives_filter_var, width=15).pack(side="left", padx=5)
         ttk.Label(filter_frame, text="Projet :").pack(side="left")
         ttk.Entry(filter_frame, textvariable=self.project_filter_var, width=20).pack(side="left", padx=5)
-        self.year_filter_var.trace("w", self.filter_folders)
-        self.category_filter_var.trace("w", self.filter_folders)
-        self.archives_filter_var.trace("w", self.filter_folders)
-        self.project_filter_var.trace("w", self.filter_folders)
+        self.year_filter_var.trace("w", self.on_filter_change)
+        self.category_filter_var.trace("w", self.on_filter_change)
+        self.archives_filter_var.trace("w", self.on_filter_change)
+        self.project_filter_var.trace("w", self.on_filter_change)
 
         self.folder_tree = ttk.Treeview(left_frame, columns=("Year", "Category", "Archives", "Project", "Notes"), show="headings")
         self.folder_tree.heading("Year", text="Année", command=lambda: self.sort_column("Year", self.sort_direction["Year"]))
@@ -132,7 +132,7 @@ class LibraryManager:
         folder_button_frame.grid(row=5, column=0, columnspan=2, pady=5)
         ttk.Button(folder_button_frame, text="Ajouter dossier", style="Add.TButton", command=self.add_folder).pack(side="left", padx=5)
         ttk.Button(folder_button_frame, text="Modifier dossier", style="Modify.TButton", command=self.modify_folder).pack(side="left", padx=5)
-        ttk.Button(folder_button_frame, text="Vider formulaire", style="Clear.TButton", command=self.clear_folder_form).pack(side="left", padx=5)
+        ttk.Button(folder_button_frame, text="Vider formulaire", style="Clear.TButton", command=self.clear_folder).pack(side="left", padx=5)
         ttk.Button(folder_button_frame, text="Supprimer dossier", style="Delete.TButton", command=self.delete_folder).pack(side="left", padx=5)
         ttk.Button(folder_button_frame, text="Supprimer catégorie", style="Delete.TButton", command=self.delete_category).pack(side="left", padx=5)
 
@@ -213,13 +213,13 @@ class LibraryManager:
         """Charge les dossiers et fichiers initiaux depuis la base de données dans les structures en mémoire."""
         # Charger les dossiers
         self.cursor.execute("SELECT DISTINCT year, category, archives, project, notes FROM library WHERE file_path != '' OR title = '[Dossier]'")
-        self.all_folders = [(row[0], row[1], row[2] or "", row[3], row[4] or "") for row in self.cursor.fetchall()]
-        print(f"Loaded {len(self.all_folders)} folders into self.all_folders")
+        self.all_folders = [(str(row[0]).strip(), str(row[1]).strip(), str(row[2] or "").strip(), str(row[3]).strip(), str(row[4] or "").strip()) for row in self.cursor.fetchall()]
+        print(f"Loaded {len(self.all_folders)} folders into self.all_folders: {self.all_folders[:5]}")  # Log first 5 for brevity
 
         # Charger les fichiers
         self.cursor.execute("SELECT id, title, year, category, archives, project FROM library WHERE file_path != ''")
-        self.all_files = [(row[0], row[1], row[2], row[3], row[4] or "", row[5]) for row in self.cursor.fetchall()]
-        print(f"Loaded {len(self.all_files)} files into self.all_files")
+        self.all_files = [(row[0], str(row[1]).strip(), str(row[2]).strip(), str(row[3]).strip(), str(row[4] or "").strip(), str(row[5]).strip()) for row in self.cursor.fetchall()]
+        print(f"Loaded {len(self.all_files)} files into self.all_files: {self.all_files[:5]}")  # Log first 5 for brevity
 
     def init_nomenclatures_file(self):
         if not os.path.exists(self.nomenclatures_file):
@@ -419,8 +419,15 @@ class LibraryManager:
         self.cursor.execute("SELECT id, year, category, archives, project, title, file_path FROM library WHERE file_path != ''")
         files = self.cursor.fetchall()
         for file_id, year, category, archives, project, title, file_path in files:
+            # Normaliser les valeurs
+            year = str(year).strip() if year else str(datetime.now().year)
+            category = str(category).strip() if category else "Unknown"
+            archives = str(archives).strip() if archives else ""
+            project = str(project).strip() if project else "Unknown"
+            title = str(title).strip()
+            
             # Chemin attendu : year/category/[archives/]project/title
-            path_components = [str(year), category]
+            path_components = [year, category]
             if archives:
                 path_components.append(archives)
             path_components.append(project)
@@ -430,7 +437,7 @@ class LibraryManager:
             
             # Si le chemin actuel diffère, mettre à jour
             if file_path != expected_path:
-                print(f"Migration du chemin pour l'ID {file_id} : {file_path} -> {expected_path}")
+                print(f"Migration du chemin pour l'ID {file_id}: {file_path} -> {expected_path}")
                 self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_path, file_id))
                 # Vérifier si le fichier existe et le déplacer si nécessaire
                 old_full_path = os.path.normpath(os.path.join(self.files_dir, file_path))
@@ -439,8 +446,9 @@ class LibraryManager:
                     try:
                         os.makedirs(os.path.dirname(new_full_path), exist_ok=True)
                         shutil.move(old_full_path, new_full_path)
+                        print(f"Moved file for ID {file_id} to {new_full_path}")
                     except Exception as e:
-                        print(f"Erreur lors du déplacement du fichier pour l'ID {file_id} : {e}")
+                        print(f"Erreur lors du déplacement du fichier pour l'ID {file_id}: {e}")
         self.conn.commit()
 
     def clean_file_paths(self):
@@ -448,8 +456,15 @@ class LibraryManager:
         self.cursor.execute("SELECT id, year, category, archives, project, title, file_path FROM library WHERE file_path != ''")
         files = self.cursor.fetchall()
         for file_id, year, category, archives, project, title, file_path in files:
-            # Construire le chemin attendu : year/category/[archives/]project/title
-            path_components = [str(year), category]
+            # Normaliser les valeurs
+            year = str(year).strip() if year else str(datetime.now().year)
+            category = str(category).strip() if category else "Unknown"
+            archives = str(archives).strip() if archives else ""
+            project = str(project).strip() if project else "Unknown"
+            title = str(title).strip()
+            
+            # Construire le chemin attendu : year/category/[archives]/project/title
+            path_components = [year, category]
             if archives:
                 path_components.append(archives)
             path_components.append(project)
@@ -459,42 +474,105 @@ class LibraryManager:
 
             # Vérifier si le chemin stocké contient une redondance
             if file_path != expected_path:
-                print(f"Chemin incorrect détecté pour l'ID {file_id} : {file_path}")
-                print(f"Chemin corrigé : {expected_path}")
+                print(f"Chemin incorrect détecté pour l'ID {file_id}: {file_path}")
+                print(f"Chemin corrigé: {expected_path}")
                 self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_path, file_id))
         self.conn.commit()
 
     def verify_and_fix_file_paths(self):
-        """Vérifie l'existence des fichiers et corrige les chemins dans la base si nécessaire."""
-        if not messagebox.askyesno("Confirmation", "Voulez-vous vérifier et corriger les chemins des fichiers ?"):
+        """Vérifie et corrige les chemins des fichiers et les métadonnées dans la base."""
+        if not messagebox.askyesno("Confirmation", "Voulez-vous vérifier et corriger les chemins des fichiers et les métadonnées ?"):
             return
         self.cursor.execute("SELECT id, year, category, archives, project, title, file_path FROM library WHERE file_path != ''")
         files = self.cursor.fetchall()
-        corrected = 0
-        missing = 0
+        corrected_paths = 0
+        corrected_metadata = 0
+        missing_files = 0
         for file_id, year, category, archives, project, title, file_path in files:
-            # Construire le chemin attendu
-            path_components = [str(year), category]
-            if archives:
-                path_components.append(archives)
-            path_components.append(project)
-            path_components.append(title)
-            expected_relative_path = os.path.join(*path_components)
-            expected_relative_path = expected_relative_path.replace('\\', '/')
-            expected_full_path = os.path.normpath(os.path.join(self.files_dir, expected_relative_path))
+            # Normaliser les valeurs actuelles
+            db_year = str(year).strip() if year else str(datetime.now().year)
+            db_category = str(category).strip() if category else "Unknown"
+            db_archives = str(archives).strip() if archives else ""
+            db_project = str(project).strip() if project else "Unknown"
+            db_title = str(title).strip()
+            db_file_path = str(file_path).strip().replace('\\', '/')
 
-            # Vérifier si le fichier existe au chemin attendu
-            if os.path.exists(expected_full_path):
-                if file_path != expected_relative_path:
-                    print(f"Corrige le chemin pour l'ID {file_id} : {file_path} -> {expected_relative_path}")
-                    self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_relative_path, file_id))
-                    corrected += 1
-            else:
-                print(f"Fichier manquant pour l'ID {file_id} : {expected_full_path}")
-                missing += 1
+            # Extraire les composants du chemin actuel
+            path_parts = db_file_path.split('/')
+            if len(path_parts) < 5 and db_archives:
+                print(f"Invalid path structure for ID {file_id}: {db_file_path}")
+                continue
+            if len(path_parts) < 4 and not db_archives:
+                print(f"Invalid path structure for ID {file_id}: {db_file_path}")
+                continue
+
+            # Déterminer les composants attendus
+            expected_year = path_parts[0]
+            expected_category = path_parts[1]
+            expected_archives = path_parts[2] if db_archives else ""
+            expected_project = path_parts[-2]
+            expected_title = path_parts[-1]
+
+            # Construire le chemin attendu
+            path_components = [expected_year, expected_category]
+            if expected_archives:
+                path_components.append(expected_archives)
+            path_components.append(expected_project)
+            path_components.append(expected_title)
+            expected_path = os.path.join(*path_components).replace('\\', '/')
+            expected_full_path = os.path.normpath(os.path.join(self.files_dir, expected_path))
+
+            # Vérifier et corriger le chemin
+            if db_file_path != expected_path:
+                print(f"Correcting path for ID {file_id}: {db_file_path} -> {expected_path}")
+                self.cursor.execute("UPDATE library SET file_path = ? WHERE id = ?", (expected_path, file_id))
+                corrected_paths += 1
+                # Déplacer le fichier si nécessaire
+                current_full_path = os.path.normpath(os.path.join(self.files_dir, db_file_path))
+                if os.path.exists(current_full_path) and not os.path.exists(expected_full_path):
+                    try:
+                        os.makedirs(os.path.dirname(expected_full_path), exist_ok=True)
+                        shutil.move(current_full_path, expected_full_path)
+                        print(f"Moved file for ID {file_id} to {expected_full_path}")
+                    except Exception as e:
+                        print(f"Error moving file for ID {file_id}: {e}")
+
+            # Vérifier si le fichier existe
+            if not os.path.exists(expected_full_path):
+                print(f"Missing file for ID {file_id}: {expected_full_path}")
+                missing_files += 1
+                continue
+
+            # Vérifier et corriger les métadonnées
+            metadata_updated = False
+            if db_year != expected_year:
+                print(f"Correcting year for ID {file_id}: {db_year} -> {expected_year}")
+                self.cursor.execute("UPDATE library SET year = ? WHERE id = ?", (expected_year, file_id))
+                metadata_updated = True
+            if db_category != expected_category:
+                print(f"Correcting category for ID {file_id}: {db_category} -> {expected_category}")
+                self.cursor.execute("UPDATE library SET category = ? WHERE id = ?", (expected_category, file_id))
+                metadata_updated = True
+            if db_archives != expected_archives:
+                print(f"Correcting archives for ID {file_id}: {db_archives} -> {expected_archives}")
+                self.cursor.execute("UPDATE library SET archives = ? WHERE id = ?", (expected_archives or None, file_id))
+                metadata_updated = True
+            if db_project != expected_project:
+                print(f"Correcting project for ID {file_id}: {db_project} -> {expected_project}")
+                self.cursor.execute("UPDATE library SET project = ? WHERE id = ?", (expected_project, file_id))
+                metadata_updated = True
+            if db_title != expected_title:
+                print(f"Correcting title for ID {file_id}: {db_title} -> {expected_title}")
+                self.cursor.execute("UPDATE library SET title = ? WHERE id = ?", (expected_title, file_id))
+                metadata_updated = True
+            if metadata_updated:
+                corrected_metadata += 1
 
         self.conn.commit()
-        messagebox.showinfo("Vérification terminée", f"Chemins corrigés : {corrected}\nFichiers manquants : {missing}")
+        # Recharger les données en mémoire après correction
+        self.load_initial_data()
+        self.refresh_folder_list()
+        messagebox.showinfo("Vérification terminée", f"Chemins corrigés: {corrected_paths}\nMétadonnées corrigées: {corrected_metadata}\nFichiers manquants: {missing_files}")
 
     def toggle_file_fields(self):
         state = "disabled" if self.keep_name_var.get() else "normal"
@@ -508,11 +586,11 @@ class LibraryManager:
         selected = self.folder_tree.selection()
         if not selected:
             self.current_selected_folder = None
-            self.clear_folder_form()
+            self.clear_folder()
             self.load_files()
             return
         year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
-        self.current_selected_folder = (year, category, archives, project, notes)
+        self.current_selected_folder = (str(year).strip(), str(category).strip(), str(archives).strip(), str(project).strip(), str(notes).strip())
         self.folder_year_var.set(year)
         self.folder_category_var.set(category)
         self.folder_archives_var.set(archives or "")
@@ -521,17 +599,17 @@ class LibraryManager:
         self.load_files()
 
     def add_folder(self):
-        year = self.folder_year_var.get()
-        category = self.folder_category_var.get()
-        archives = self.folder_archives_var.get()
-        project = self.folder_project_var.get()
-        notes = self.folder_notes_var.get()
+        year = self.folder_year_var.get().strip()
+        category = self.folder_category_var.get().strip()
+        archives = self.folder_archives_var.get().strip()
+        project = self.folder_project_var.get().strip()
+        notes = self.folder_notes_var.get().strip()
 
         if not all([year, category, project]):
             messagebox.showwarning("Erreur", "Les champs Année, Catégorie et Projet doivent être remplis.")
             return
 
-        path_components = [self.files_dir, str(year), category]
+        path_components = [self.files_dir, year, category]
         if archives:
             path_components.append(archives)
         path_components.append(project)
@@ -544,23 +622,23 @@ class LibraryManager:
 
         self.cursor.execute('''INSERT INTO library (title, year, category, archives, project, notes, file_path)
                             VALUES (?, ?, ?, ?, ?, ?, ?)''',
-                           ("[Dossier]", year, category, archives, project, notes, ""))
+                           ("[Dossier]", year, category, archives or None, project, notes, ""))
         self.conn.commit()
         self.all_folders.append((year, category, archives or "", project, notes or ""))
         print(f"Added folder to self.all_folders: {year}/{category}/{archives}/{project}")
         self.refresh_folder_list()
-        self.clear_folder_form()
+        self.clear_folder()
 
     def modify_folder(self):
         if not self.current_selected_folder:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier à modifier.")
             return
 
-        new_year = self.folder_year_var.get()
-        new_category = self.folder_category_var.get()
-        new_archives = self.folder_archives_var.get()
-        new_project = self.folder_project_var.get()
-        new_notes = self.folder_notes_var.get()
+        new_year = self.folder_year_var.get().strip()
+        new_category = self.folder_category_var.get().strip()
+        new_archives = self.folder_archives_var.get().strip()
+        new_project = self.folder_project_var.get().strip()
+        new_notes = self.folder_notes_var.get().strip()
 
         if not all([new_year, new_category, new_project]):
             messagebox.showwarning("Erreur", "Les champs Année, Catégorie et Projet doivent être remplis.")
@@ -577,19 +655,19 @@ class LibraryManager:
 
         # Vérifier si le nouveau dossier existe déjà (sauf si c'est le même dossier)
         self.cursor.execute("SELECT 1 FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=? AND (year != ? OR category != ? OR archives != ? OR project != ?)",
-                           (new_year, new_category, new_archives or None, new_project, old_year, old_category, old_archives or None, old_project))
+                           (new_year, new_category, new_archives or None, new_project, old_year, old_category, old_archives or "", old_project))
         if self.cursor.fetchone():
             messagebox.showerror("Erreur", "Ce dossier existe déjà.")
             return
 
         # Déplacer le dossier physique
-        old_path_components = [self.files_dir, str(old_year), old_category]
+        old_path_components = [self.files_dir, old_year, old_category]
         if old_archives:
             old_path_components.append(old_archives)
         old_path_components.append(old_project)
         old_folder_path = os.path.normpath(os.path.join(*old_path_components))
 
-        new_path_components = [self.files_dir, str(new_year), new_category]
+        new_path_components = [self.files_dir, new_year, new_category]
         if new_archives:
             new_path_components.append(new_archives)
         new_path_components.append(new_project)
@@ -599,6 +677,7 @@ class LibraryManager:
             try:
                 os.makedirs(os.path.dirname(new_folder_path), exist_ok=True)
                 shutil.move(old_folder_path, new_folder_path)
+                print(f"Moved folder: {old_folder_path} -> {new_folder_path}")
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible de déplacer le dossier : {e}")
                 return
@@ -606,14 +685,14 @@ class LibraryManager:
         # Mettre à jour la base de données
         self.cursor.execute('''UPDATE library SET year=?, category=?, archives=?, project=?, notes=? 
                             WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=?''',
-                           (new_year, new_category, new_archives or None, new_project, new_notes, old_year, old_category, old_archives or None, old_project))
+                           (new_year, new_category, new_archives or None, new_project, new_notes, old_year, old_category, old_archives or "", old_project))
         
         # Mettre à jour les chemins des fichiers
         self.cursor.execute("SELECT id, file_path FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=? AND file_path != ''",
                            (new_year, new_category, new_archives or None, new_project))
         for file_id, file_path in self.cursor.fetchall():
             file_name = os.path.basename(file_path)
-            path_components = [str(new_year), new_category]
+            path_components = [new_year, new_category]
             if new_archives:
                 path_components.append(new_archives)
             path_components.append(new_project)
@@ -621,6 +700,7 @@ class LibraryManager:
             new_relative_path = os.path.join(*path_components)
             new_relative_path = new_relative_path.replace('\\', '/')
             self.cursor.execute("UPDATE library SET file_path=? WHERE id=?", (new_relative_path, file_id))
+            print(f"Updated file path for ID {file_id}: {file_path} -> {new_relative_path}")
         
         self.conn.commit()
 
@@ -632,12 +712,13 @@ class LibraryManager:
         for i, (file_id, title, f_year, f_category, f_archives, f_project) in enumerate(self.all_files):
             if (f_year, f_category, f_archives, f_project) == (old_year, old_category, old_archives, old_project):
                 self.all_files[i] = (file_id, title, new_year, new_category, new_archives or "", new_project)
+                print(f"Updated file in self.all_files: ID={file_id}, Title={title}, New Folder={new_year}/{new_category}/{new_archives}/{new_project}")
 
         # Mettre à jour la sélection actuelle
         self.current_selected_folder = (new_year, new_category, new_archives or "", new_project, new_notes or "")
         self.current_folder = self.current_selected_folder
         self.refresh_folder_list()
-        self.clear_folder_form()
+        self.clear_folder()
         self.load_files()
 
     def delete_folder(self):
@@ -646,14 +727,19 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier à supprimer.")
             return
         year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip()
+        project = str(project).strip()
+        notes = str(notes).strip()
         
         # Compter le nombre de pièces dans le dossier
-        num_files = sum(1 for f in self.all_files if f[2] == year and f[3] == category and f[4] == (archives or "") and f[5] == project)
+        num_files = sum(1 for f in self.all_files if f[2].lower() == year.lower() and f[3].lower() == category.lower() and f[4].lower() == archives.lower() and f[5].lower() == project.lower())
         
-        if not messagebox.askyesno("Confirmation", f"Supprimer le dossier {year}/{category}/{archives or ''}/{project} et ses {num_files} pièce(s) ?"):
+        if not messagebox.askyesno("Confirmation", f"Supprimer le dossier {year}/{category}/{archives}/{project} et ses {num_files} pièce(s) ?"):
             return
 
-        path_components = [self.files_dir, str(year), category]
+        path_components = [self.files_dir, year, category]
         if archives:
             path_components.append(archives)
         path_components.append(project)
@@ -667,20 +753,24 @@ class LibraryManager:
                 try:
                     if os.path.exists(full_path):
                         os.remove(full_path)
+                        print(f"Deleted file: {full_path}")
                 except Exception as e:
-                    pass
+                    print(f"Erreur lors de la suppression du fichier {full_path}: {e}")
         try:
             if os.path.exists(folder_path):
                 shutil.rmtree(folder_path)
+                print(f"Deleted folder: {folder_path}")
         except Exception as e:
-            pass
+            print(f"Erreur lors de la suppression du dossier {folder_path}: {e}")
         self.cursor.execute("DELETE FROM library WHERE year=? AND category=? AND (archives=? OR archives IS NULL) AND project=?", 
                            (year, category, archives or None, project))
         self.conn.commit()
 
         # Mettre à jour self.all_folders et self.all_files
-        self.all_folders = [f for f in self.all_folders if f != (year, category, archives or "", project, notes or "")]
-        self.all_files = [f for f in self.all_files if not (f[2] == year and f[3] == category and f[4] == (archives or "") and f[5] == project)]
+        self.all_folders = [f for f in self.all_folders if f != (year, category, archives, project, notes)]
+        self.all_files = [f for f in self.all_files if not (f[2].lower() == year.lower() and f[3].lower() == category.lower() and f[4].lower() == archives.lower() and f[5].lower() == project.lower())]
+        print(f"Deleted folder from self.all_folders: {year}/{category}/{archives}/{project}")
+        print(f"Remaining files in self.all_files: {len(self.all_files)}")
 
         # Vérifier si la catégorie est vide
         self.cursor.execute("SELECT 1 FROM library WHERE category=?", (category,))
@@ -691,11 +781,12 @@ class LibraryManager:
                 try:
                     if os.path.exists(category_path):
                         shutil.rmtree(category_path)
+                        print(f"Deleted empty category folder: {category_path}")
                 except Exception as e:
-                    pass
+                    print(f"Erreur lors de la suppression de la catégorie {category_path}: {e}")
             
         self.refresh_folder_list()
-        self.clear_folder_form()
+        self.clear_folder()
         self.load_files()
 
     def delete_category(self):
@@ -703,17 +794,21 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier pour supprimer sa catégorie.")
             return
         _, category, _, _, _ = self.current_selected_folder
+        category = str(category).strip()
         
         # Compter le nombre de dossiers et de pièces dans la catégorie
-        num_folders = sum(1 for f in self.all_folders if f[1] == category)
-        num_files = sum(1 for f in self.all_files if f[3] == category)
+        num_folders = sum(1 for f in self.all_folders if f[1].lower() == category.lower())
+        num_files = sum(1 for f in self.all_files if f[3].lower() == category.lower())
 
         if not messagebox.askyesno("Confirmation", f"Supprimer la catégorie '{category}' ? Cela supprimera {num_folders} dossier(s) et {num_files} pièce(s)."):
             return
 
         self.cursor.execute("SELECT DISTINCT year, archives, project FROM library WHERE category=?", (category,))
         for year, archives, project in self.cursor.fetchall():
-            path_components = [self.files_dir, str(year), category]
+            year = str(year).strip()
+            archives = str(archives).strip() if archives else ""
+            project = str(project).strip()
+            path_components = [self.files_dir, year, category]
             if archives:
                 path_components.append(archives)
             path_components.append(project)
@@ -727,29 +822,34 @@ class LibraryManager:
                     try:
                         if os.path.exists(full_path):
                             os.remove(full_path)
+                            print(f"Deleted file: {full_path}")
                     except Exception as e:
-                        pass
+                        print(f"Erreur lors de la suppression du fichier {full_path}: {e}")
             try:
                 if os.path.exists(folder_path):
                     shutil.rmtree(folder_path)
+                    print(f"Deleted folder: {folder_path}")
             except Exception as e:
-                pass
+                print(f"Erreur lors de la suppression du dossier {folder_path}: {e}")
         for year_dir in os.listdir(self.files_dir):
             category_path = os.path.normpath(os.path.join(self.files_dir, year_dir, category))
             try:
                 if os.path.exists(category_path):
                     shutil.rmtree(category_path)
+                    print(f"Deleted category folder: {category_path}")
             except Exception as e:
-                pass
+                print(f"Erreur lors de la suppression de la catégorie {category_path}: {e}")
         self.cursor.execute("DELETE FROM library WHERE category=?", (category,))
         self.conn.commit()
 
         # Mettre à jour self.all_folders et self.all_files
-        self.all_folders = [f for f in self.all_folders if f[1] != category]
-        self.all_files = [f for f in self.all_files if f[3] != category]
+        self.all_folders = [f for f in self.all_folders if f[1].lower() != category.lower()]
+        self.all_files = [f for f in self.all_files if f[3].lower() != category.lower()]
+        print(f"Deleted category from self.all_folders: {category}")
+        print(f"Remaining files in self.all_files: {len(self.all_files)}")
 
         self.refresh_folder_list()
-        self.clear_folder_form()
+        self.clear_folder()
         self.load_files()
 
     def add_file(self):
@@ -759,7 +859,14 @@ class LibraryManager:
             return
 
         year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
+        # Normaliser les valeurs
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip() or ""
+        project = str(project).strip()
+        notes = str(notes).strip() or ""
         print(f"Adding file to folder: {year}/{category}/{archives}/{project}")
+
         file_path = filedialog.askopenfilename(
             filetypes=[("Tous les fichiers", "*.*")],
             title="Sélectionner un fichier"
@@ -780,18 +887,18 @@ class LibraryManager:
             objet = None
             version = None
         else:
-            site = self.site_var.get()
-            nomenclature = self.nomenclature_var.get()
-            emetteur = self.emetteur_var.get()
-            objet = self.objet_var.get()
-            version = self.version_var.get()
+            site = self.site_var.get().strip()
+            nomenclature = self.nomenclature_var.get().strip()
+            emetteur = self.emetteur_var.get().strip()
+            objet = self.objet_var.get().strip()
+            version = self.version_var.get().strip()
             if not all([site, nomenclature, emetteur, objet, version]):
                 messagebox.showwarning("Erreur", "Tous les champs de la pièce doivent être remplis si le renommage est activé.")
                 return
             title = f"{year}-{site}-{nomenclature}-{emetteur}-{objet}-{version}{os.path.splitext(file_path)[1]}"
 
         # Construire le chemin de destination
-        path_components = [str(year), category]
+        path_components = [year, category]
         if archives:
             path_components.append(archives)
         path_components.append(project)
@@ -816,13 +923,14 @@ class LibraryManager:
                 shutil.move(file_path, dest_path)
             else:
                 shutil.copy2(file_path, dest_path)
+            print(f"{'Moved' if move_file else 'Copied'} file to {dest_path}")
         except Exception as e:
             messagebox.showerror("Erreur", f"Impossible de {'déplacer' if move_file else 'copier'} le fichier : {e}")
             return
 
         self.cursor.execute('''INSERT INTO library (title, year, category, archives, project, site, nomenclature, emetteur, objet, version, file_path, notes)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                           (title, year, category, archives, project, site, nomenclature, emetteur, objet, version, relative_dest_path, notes))
+                           (title, year, category, archives or None, project, site, nomenclature, emetteur, objet, version, relative_dest_path, notes))
         self.conn.commit()
 
         # Récupérer l'ID du fichier inséré
@@ -830,11 +938,11 @@ class LibraryManager:
         file_id = self.cursor.fetchone()[0]
 
         # Ajouter le fichier à self.all_files
-        self.all_files.append((file_id, title, year, category, archives or "", project))
-        print(f"Added file to self.all_files: ID={file_id}, Title={title}")
+        self.all_files.append((file_id, title, year, category, archives, project))
+        print(f"Added file to self.all_files: ID={file_id}, Title={title}, Folder={year}/{category}/{archives}/{project}")
 
         # Mettre à jour la sélection actuelle
-        self.current_selected_folder = (year, category, archives or "", project, notes or "")
+        self.current_selected_folder = (year, category, archives, project, notes)
         self.current_folder = self.current_selected_folder
         print(f"Set current_selected_folder: {self.current_selected_folder}")
 
@@ -844,10 +952,10 @@ class LibraryManager:
         # Sélectionner explicitement le dossier dans le Treeview
         for item in self.folder_tree.get_children():
             values = self.folder_tree.item(item)["values"]
-            if (values[0] == year and 
-                values[1] == category and 
-                values[2] == (archives or "") and 
-                values[3] == project):
+            if (str(values[0]).strip().lower() == year.lower() and 
+                str(values[1]).strip().lower() == category.lower() and 
+                str(values[2]).strip().lower() == archives.lower() and 
+                str(values[3]).strip().lower() == project.lower()):
                 self.folder_tree.selection_set(item)
                 self.folder_tree.focus(item)
                 self.folder_tree.see(item)
@@ -873,21 +981,27 @@ class LibraryManager:
             return
 
         year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip() or ""
+        project = str(project).strip()
+        notes = str(notes).strip() or ""
+
         keep_name = self.keep_name_var.get()
         if keep_name:
             self.cursor.execute("SELECT title FROM library WHERE id=?", (self.current_file_id,))
-            title = self.cursor.fetchone()[0]
+            title = self.cursor.fetchone()[0].strip()
             site = None
             nomenclature = None
             emetteur = None
             objet = None
             version = None
         else:
-            site = self.site_var.get()
-            nomenclature = self.nomenclature_var.get()
-            emetteur = self.emetteur_var.get()
-            objet = self.objet_var.get()
-            version = self.version_var.get()
+            site = self.site_var.get().strip()
+            nomenclature = self.nomenclature_var.get().strip()
+            emetteur = self.emetteur_var.get().strip()
+            objet = self.objet_var.get().strip()
+            version = self.version_var.get().strip()
             if not all([site, nomenclature, emetteur, objet, version]):
                 messagebox.showwarning("Erreur", "Tous les champs de la pièce doivent être remplis si le renommage est activé.")
                 return
@@ -896,11 +1010,11 @@ class LibraryManager:
             title = f"{year}-{site}-{nomenclature}-{emetteur}-{objet}-{version}{os.path.splitext(old_path)[1]}"
 
         self.cursor.execute("SELECT file_path FROM library WHERE id=?", (self.current_file_id,))
-        old_relative_path = self.cursor.fetchone()[0]
+        old_relative_path = self.cursor.fetchone()[0].strip().replace('\\', '/')
         old_path = os.path.normpath(os.path.join(self.files_dir, old_relative_path))
 
         # Construire le nouveau chemin
-        path_components = [str(year), category]
+        path_components = [year, category]
         if archives:
             path_components.append(archives)
         path_components.append(project)
@@ -922,23 +1036,24 @@ class LibraryManager:
                     return
             try:
                 shutil.move(old_path, new_path)
+                print(f"Moved file: {old_path} -> {new_path}")
             except Exception as e:
                 messagebox.showerror("Erreur", f"Impossible de renommer/déplacer le fichier : {e}")
                 return
 
         self.cursor.execute('''UPDATE library SET title=?, year=?, category=?, archives=?, project=?, site=?, nomenclature=?, emetteur=?, objet=?, version=?, file_path=?, notes=?
                             WHERE id=?''',
-                           (title, year, category, archives, project, site, nomenclature, emetteur, objet, version, new_relative_path, notes, self.current_file_id))
+                           (title, year, category, archives or None, project, site, nomenclature, emetteur, objet, version, new_relative_path, notes, self.current_file_id))
         self.conn.commit()
 
         # Mettre à jour self.all_files
         for i, (file_id, _, f_year, f_category, f_archives, f_project) in enumerate(self.all_files):
             if file_id == self.current_file_id:
-                self.all_files[i] = (file_id, title, year, category, archives or "", project)
-                print(f"Updated file in self.all_files: ID={file_id}, Title={title}")
+                self.all_files[i] = (file_id, title, year, category, archives, project)
+                print(f"Updated file in self.all_files: ID={file_id}, Title={title}, Folder={year}/{category}/{archives}/{project}")
                 break
 
-        self.current_selected_folder = (year, category, archives or "", project, notes or "")
+        self.current_selected_folder = (year, category, archives, project, notes)
         self.current_folder = self.current_selected_folder
         self.refresh_folder_list()
         self.load_files()
@@ -949,18 +1064,19 @@ class LibraryManager:
             messagebox.showwarning("Erreur", "Veuillez sélectionner une pièce à supprimer.")
             return
         file_id = self.file_tree.item(selected[0])["values"][0]
-        self.cursor.execute("SELECT title FROM library WHERE id=?", (file_id,))
-        file_title = self.cursor.fetchone()[0]
+        self.cursor.execute("SELECT title, file_path FROM library WHERE id=?", (file_id,))
+        file_title, file_path = self.cursor.fetchone()
+        file_title = str(file_title).strip()
+        file_path = str(file_path).strip().replace('\\', '/')
         if not messagebox.askyesno("Confirmation", f"Supprimer la pièce '{file_title}' de la bibliothèque ?"):
             return
-        self.cursor.execute("SELECT file_path FROM library WHERE id=?", (file_id,))
-        relative_path = self.cursor.fetchone()[0]
-        file_path = os.path.normpath(os.path.join(self.files_dir, relative_path))
+        full_path = os.path.normpath(os.path.join(self.files_dir, file_path))
         try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            if os.path.exists(full_path):
+                os.remove(full_path)
+                print(f"Deleted file: {full_path}")
         except Exception as e:
-            pass
+            print(f"Erreur lors de la suppression du fichier {full_path}: {e}")
         self.cursor.execute("DELETE FROM library WHERE id=?", (file_id,))
         self.conn.commit()
 
@@ -985,9 +1101,15 @@ class LibraryManager:
             return
         
         year, category, archives, project, title, stored_file_path = result
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip() if archives else ""
+        project = str(project).strip()
+        title = str(title).strip()
+        stored_file_path = str(stored_file_path).strip().replace('\\', '/')
 
         # Construire le chemin attendu
-        path_components = [str(year), category]
+        path_components = [year, category]
         if archives:
             path_components.append(archives)
         path_components.append(project)
@@ -999,14 +1121,13 @@ class LibraryManager:
         # Vérifier si le fichier existe avec le chemin reconstruit
         if os.path.exists(expected_file_path):
             file_path = expected_file_path
-            print(f"Ouverture du fichier avec le chemin reconstruit : {file_path}")
+            print(f"Ouverture du fichier avec le chemin reconstruit: {file_path}")
         else:
             # Si le fichier n'existe pas au chemin attendu, essayer le chemin stocké
-            stored_file_path = stored_file_path.replace('\\', '/')
             file_path = os.path.normpath(os.path.join(self.files_dir, stored_file_path))
-            print(f"Fichier non trouvé au chemin reconstruit, tentative avec le chemin stocké : {file_path}")
+            print(f"Fichier non trouvé au chemin reconstruit, tentative avec le chemin stocké: {file_path}")
             if not os.path.exists(file_path):
-                messagebox.showerror("Erreur", f"Le fichier n'existe pas :\nChemin attendu : {expected_file_path}\nChemin stocké : {file_path}\nVérifiez si le fichier a été déplacé ou supprimé.")
+                messagebox.showerror("Erreur", f"Le fichier n'existe pas :\nChemin attendu: {expected_file_path}\nChemin stocké: {file_path}\nVérifiez si le fichier a été déplacé ou supprimé.")
                 return
 
         # Vérifier les permissions de lecture
@@ -1025,13 +1146,13 @@ class LibraryManager:
                     check=True
                 )
                 if result.stderr:
-                    messagebox.showwarning("Avertissement", f"Erreur lors de l'ouverture avec xdg-open : {result.stderr}")
+                    messagebox.showwarning("Avertissement", f"Erreur lors de l'ouverture avec xdg-open: {result.stderr}")
             else:
                 subprocess.run(["open", file_path], check=True)
         except subprocess.CalledProcessError as e:
-            messagebox.showerror("Erreur", f"Échec de l'ouverture du fichier : {e.stderr}")
+            messagebox.showerror("Erreur", f"Échec de l'ouverture du fichier: {e.stderr}")
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier : {str(e)}")
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir le fichier: {str(e)}")
 
     def open_file_explorer(self):
         selected = self.file_tree.selection()
@@ -1046,9 +1167,15 @@ class LibraryManager:
             return
         
         year, category, archives, project, title, stored_file_path = result
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip() if archives else ""
+        project = str(project).strip()
+        title = str(title).strip()
+        stored_file_path = str(stored_file_path).strip().replace('\\', '/')
 
         # Construire le chemin attendu
-        path_components = [str(year), category]
+        path_components = [year, category]
         if archives:
             path_components.append(archives)
         path_components.append(project)
@@ -1062,10 +1189,9 @@ class LibraryManager:
             file_path = expected_file_path
         else:
             # Sinon, utiliser le chemin stocké
-            stored_file_path = stored_file_path.replace('\\', '/')
             file_path = os.path.normpath(os.path.join(self.files_dir, stored_file_path))
             if not os.path.exists(file_path):
-                messagebox.showerror("Erreur", f"Le fichier n'existe pas pour ouvrir son emplacement :\nChemin attendu : {expected_file_path}\nChemin stocké : {file_path}")
+                messagebox.showerror("Erreur", f"Le fichier n'existe pas pour ouvrir son emplacement :\nChemin attendu: {expected_file_path}\nChemin stocké: {file_path}")
                 return
 
         # Obtenir le dossier parent du fichier
@@ -1079,7 +1205,7 @@ class LibraryManager:
             else:
                 subprocess.run(["open", folder_path])
         except Exception as e:
-            messagebox.showerror("Erreur", f"Impossible d'ouvrir l'explorateur de fichiers : {str(e)}")
+            messagebox.showerror("Erreur", f"Impossible d'ouvrir l'explorateur de fichiers: {str(e)}")
 
     def load_file_to_form(self, event):
         selected = self.file_tree.selection()
@@ -1091,15 +1217,15 @@ class LibraryManager:
         result = self.cursor.fetchone()
         if result:
             title, site, nomenclature, emetteur, objet, version = result
-            self.site_var.set(site or "")
-            self.nomenclature_var.set(nomenclature or "")
-            self.emetteur_var.set(emetteur or "")
-            self.objet_var.set(objet or "")
-            self.version_var.set(version or "")
+            self.site_var.set(str(site).strip() if site else "")
+            self.nomenclature_var.set(str(nomenclature).strip() if nomenclature else "")
+            self.emetteur_var.set(str(emetteur).strip() if emetteur else "")
+            self.objet_var.set(str(objet).strip() if objet else "")
+            self.version_var.set(str(version).strip() if version else "")
             self.keep_name_var.set(not all([site, nomenclature, emetteur, objet, version]))
             self.toggle_file_fields()
 
-    def clear_folder_form(self):
+    def clear_folder(self):
         self.current_selected_folder = None
         self.folder_year_var.set(str(datetime.now().year))
         self.folder_category_var.set("")
@@ -1143,7 +1269,7 @@ class LibraryManager:
             row for row in self.all_folders
             if (not year_filter or year_filter in str(row[0]).lower())
             and (not category_filter or category_filter in str(row[1]).lower())
-            and (not archives_filter or archives_filter in str(row[2] or "").lower())
+            and (not archives_filter or archives_filter in str(row[2]).lower())
             and (not project_filter or project_filter in str(row[3]).lower())
         ]
 
@@ -1162,8 +1288,8 @@ class LibraryManager:
         # Insérer les données filtrées et triées dans le Treeview avec couleurs alternées
         items = []
         for index, row in enumerate(filtered_folders):
-            # Normaliser les valeurs, en particulier archives
-            normalized_row = (str(row[0]), str(row[1]), str(row[2] or ""), str(row[3]), str(row[4] or ""))
+            # Normaliser les valeurs
+            normalized_row = (str(row[0]).strip(), str(row[1]).strip(), str(row[2]).strip(), str(row[3]).strip(), str(row[4]).strip())
             tag = "OddRow" if index % 2 else "EvenRow"
             item = self.folder_tree.insert("", tk.END, values=normalized_row, tags=(tag,))
             items.append((item, normalized_row))
@@ -1171,15 +1297,18 @@ class LibraryManager:
         # Restaurer la sélection
         if selected_values and self.current_selected_folder:
             normalized_selected = (
-                str(self.current_selected_folder[0]), 
-                str(self.current_selected_folder[1]), 
-                str(self.current_selected_folder[2] or ""), 
-                str(self.current_selected_folder[3]), 
-                str(self.current_selected_folder[4] or "")
+                str(self.current_selected_folder[0]).strip(), 
+                str(self.current_selected_folder[1]).strip(), 
+                str(self.current_selected_folder[2]).strip(), 
+                str(self.current_selected_folder[3]).strip(), 
+                str(self.current_selected_folder[4]).strip()
             )
             found = False
             for item, values in items:
-                if values == normalized_selected:
+                if (values[0].lower() == normalized_selected[0].lower() and
+                    values[1].lower() == normalized_selected[1].lower() and
+                    values[2].lower() == normalized_selected[2].lower() and
+                    values[3].lower() == normalized_selected[3].lower()):
                     self.folder_tree.selection_set(item)
                     self.folder_tree.see(item)
                     found = True
@@ -1192,7 +1321,7 @@ class LibraryManager:
                     self.current_folder = first_values
                     self.folder_tree.see(first_item)
 
-    def filter_folders(self, *args):
+    def on_filter_change(self, *args):
         self.refresh_folder_list()
 
     def load_files(self):
@@ -1207,12 +1336,19 @@ class LibraryManager:
         
         self.current_folder = self.current_selected_folder
         year, category, archives, project, notes = self.current_folder
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip()
+        project = str(project).strip()
         print(f"Loading files for folder: {year}/{category}/{archives}/{project}")
 
         # Filtrer les fichiers correspondant au dossier sélectionné
         matching_files = [
             (file_id, title) for file_id, title, f_year, f_category, f_archives, f_project in self.all_files
-            if f_year == year and f_category == category and f_archives == (archives or "") and f_project == project
+            if f_year.lower() == year.lower() and 
+               f_category.lower() == category.lower() and 
+               f_archives.lower() == archives.lower() and 
+               f_project.lower() == project.lower()
         ]
 
         print(f"Found {len(matching_files)} files for folder: {matching_files}")
@@ -1233,13 +1369,20 @@ class LibraryManager:
         
         search_term = self.search_var.get().lower()
         year, category, archives, project, notes = self.current_folder
+        year = str(year).strip()
+        category = str(category).strip()
+        archives = str(archives).strip()
+        project = str(project).strip()
         print(f"Filtering files for folder: {year}/{category}/{archives}/{project}, search_term: {search_term}")
 
         # Filtrer les fichiers correspondant au dossier et au terme de recherche
         matching_files = [
             (file_id, title) for file_id, title, f_year, f_category, f_archives, f_project in self.all_files
-            if f_year == year and f_category == category and f_archives == (archives or "") and f_project == project
-            and search_term in title.lower()
+            if f_year.lower() == year.lower() and 
+               f_category.lower() == category.lower() and 
+               f_archives.lower() == archives.lower() and 
+               f_project.lower() == project.lower() and
+               search_term in title.lower()
         ]
 
         print(f"Found {len(matching_files)} filtered files: {matching_files}")
