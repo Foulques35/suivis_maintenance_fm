@@ -29,7 +29,8 @@ BACKUP_DIR = os.path.join(DATA_DIR, "db_backup")
 DEPENDENCIES = {
     "matplotlib": "matplotlib",
     "numpy": "numpy",
-    "dateutil": "python-dateutil"
+    "dateutil": "python-dateutil",
+    "tkcalendar" : "tkcalendar"
 }
 
 def check_dependencies():
