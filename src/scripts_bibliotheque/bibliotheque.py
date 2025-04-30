@@ -187,7 +187,6 @@ class LibraryManager:
             raw_folders = self.cursor.fetchall()
             self.all_folders = []
             for row in raw_folders:
-                # S'assurer que chaque élément est une string et non None
                 year = str(row[0]).strip() if row[0] is not None else ""
                 category = str(row[1]).strip() if row[1] is not None else ""
                 archives = str(row[2]).strip() if row[2] is not None else ""
@@ -551,7 +550,6 @@ class LibraryManager:
 
             log_message("Recherche des dossiers orphelins...")
 
-            # Récupérer tous les dossiers référencés dans la base de données
             self.cursor.execute("SELECT DISTINCT year, category, archives, project FROM library")
             active_folders = set()
             for row in self.cursor.fetchall():
@@ -561,7 +559,6 @@ class LibraryManager:
                 project = str(row[3]).strip()
                 active_folders.add((year, category, archives, project))
 
-            # Parcourir les dossiers sur le disque
             orphan_folders = []
             for year_dir in os.listdir(self.files_dir):
                 year_path = os.path.join(self.files_dir, year_dir)
@@ -575,12 +572,10 @@ class LibraryManager:
                         dir_path = os.path.join(category_path, dir_name)
                         if not os.path.isdir(dir_path):
                             continue
-                        # Cas sans archives
                         archives = ""
                         project = dir_name
                         folder_tuple = (year_dir, category_dir, archives, project)
                         if folder_tuple not in active_folders:
-                            # Vérifier si le dossier contient des fichiers référencés
                             has_referenced_files = False
                             for root, _, files in os.walk(dir_path):
                                 for file in files:
@@ -594,7 +589,6 @@ class LibraryManager:
                                     break
                             if not has_referenced_files:
                                 orphan_folders.append(os.path.join(year_dir, category_dir, project))
-                        # Cas avec archives
                         for sub_dir in os.listdir(dir_path):
                             sub_dir_path = os.path.join(dir_path, sub_dir)
                             if not os.path.isdir(sub_dir_path):
@@ -648,7 +642,6 @@ class LibraryManager:
                 except Exception as e:
                     log_message(f"Erreur lors de la suppression de {folder_path} : {str(e)}")
 
-            # Nettoyer les dossiers parents vides
             for year_dir in os.listdir(self.files_dir):
                 year_path = os.path.join(self.files_dir, year_dir)
                 if not os.path.isdir(year_path):
@@ -657,14 +650,14 @@ class LibraryManager:
                     category_path = os.path.join(year_path, category_dir)
                     if not os.path.isdir(category_path):
                         continue
-                    if not os.listdir(category_path):  # Dossier vide
+                    if not os.listdir(category_path):
                         try:
                             shutil.rmtree(category_path)
                             log_message(f"Dossier vide supprimé : {category_path}")
                             deleted_count += 1
                         except Exception as e:
                             log_message(f"Erreur lors de la suppression de {category_path} : {str(e)}")
-                if not os.listdir(year_path):  # Dossier année vide
+                if not os.listdir(year_path):
                     try:
                         shutil.rmtree(year_path)
                         log_message(f"Dossier vide supprimé : {year_path}")
@@ -974,12 +967,14 @@ class LibraryManager:
             if not selected:
                 messagebox.showwarning("Erreur", "Veuillez sélectionner un dossier.")
                 return
+
             year, category, archives, project, notes = self.folder_tree.item(selected[0])["values"]
             year = str(year).strip()
             category = str(category).strip()
             archives = str(archives).strip() if archives else ""
             project = str(project).strip()
             notes = str(notes).strip() if notes else ""
+
             keep_name = self.keep_name_var.get()
             if keep_name:
                 self.cursor.execute("SELECT title FROM library WHERE id=?", (self.current_file_id,))
@@ -995,34 +990,44 @@ class LibraryManager:
                 emetteur = self.emetteur_var.get().strip()
                 objet = self.objet_var.get().strip()
                 version = self.version_var.get().strip()
+
                 if not all([site, nomenclature, emetteur, objet, version]):
                     messagebox.showwarning("Erreur", "Tous les champs de la pièce sont obligatoires.")
                     return
+
                 self.cursor.execute("SELECT file_path FROM library WHERE id=?", (self.current_file_id,))
                 old_path = os.path.normpath(os.path.join(self.files_dir, self.cursor.fetchone()[0]))
                 title = f"{year}-{site}-{nomenclature}-{emetteur}-{objet}-{version}{os.path.splitext(old_path)[1]}"
+
             self.cursor.execute("SELECT file_path FROM library WHERE id=?", (self.current_file_id,))
             old_relative_path = self.cursor.fetchone()[0].strip().replace('\\', '/')
             old_path = os.path.normpath(os.path.join(self.files_dir, old_relative_path))
+
             path_components = [year, category] + ([archives] if archives else []) + [project]
             relative_dest_dir = os.path.join(*path_components).replace('\\', '/')
             dest_dir = os.path.normpath(os.path.join(self.files_dir, relative_dest_dir))
             os.makedirs(dest_dir, exist_ok=True)
             new_relative_path = os.path.join(relative_dest_dir, title).replace('\\', '/')
             new_path = os.path.normpath(os.path.join(self.files_dir, new_relative_path))
+
             if new_path != old_path:
                 if os.path.exists(new_path):
                     if not messagebox.askyesno("Confirmation", f"Le fichier {title} existe déjà. Voulez-vous l'écraser ?"):
                         return
                 shutil.move(old_path, new_path)
+
             self.cursor.execute('''UPDATE library SET title=?, year=?, category=?, archives=?, project=?, site=?, nomenclature=?, emetteur=?, objet=?, version=?, file_path=?, notes=?
                                 WHERE id=?''',
-                               (title, year, category, archives if archives else None, project, site, nomenclature, emetteur, objet, version, new_relative_path, notes))
+                               (title, year, category, archives if archives else None, project, site if site else None, 
+                                nomenclature if nomenclature else None, emetteur if emetteur else None, 
+                                objet if objet else None, version if version else None, new_relative_path, notes, self.current_file_id))
             self.conn.commit()
+
             for i, (file_id, _, f_year, f_category, f_archives, f_project) in enumerate(self.all_files):
                 if file_id == self.current_file_id:
                     self.all_files[i] = (file_id, title, year, category, archives, project)
                     break
+
             self.current_selected_folder = (year, category, archives, project, notes)
             self.current_folder = self.current_selected_folder
             self.refresh_folder_list()
@@ -1217,7 +1222,6 @@ class LibraryManager:
                 filtered_folders = [row for row in filtered_folders if project_filter in row[3].lower()]
             col_index = {"year": 0, "category": 1, "archives": 2, "project": 3, "notes": 4}
             sort_index = col_index[self.sort_column_name]
-            # Vérifier les données avant le tri
             for row in filtered_folders:
                 if len(row) != 5:
                     raise ValueError(f"Donnée invalide dans filtered_folders : {row}")
