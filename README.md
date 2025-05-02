@@ -52,18 +52,12 @@ Que vous soyez un technicien, un gestionnaire de projet ou un particulier, Archi
   - Placer l'éxécutable dans le dossier ou vous souhaitez avoir l'application et lancez la.
 
 ### Téléchargement et exécution
-1. Téléchargez la dernière release depuis l’onglet [Releases](https://github.com/Foulques35/suivis_maintenance_fm/releases).
-   - Pour Linux : `Archiviste_Linux`
-   - Pour Windows : `Archiviste_Windows.exe`
+1. Téléchargez le dossier src.
 2. Placez l’application dans un dossier où vous avez les permissions d’écriture.
 3. Lancez l’application :
-   - **Linux** :
-     ```
-     ./Archiviste
-     ```
-   - **Windows** :
-     - Double-cliquez sur `Archiviste.exe`.
-     - Si une alerte SmartScreen ("Éditeur inconnu") apparaît, cliquez sur "Plus d’infos" > "Exécuter quand même".
+   - **Windows & Linux** :
+     - Lancez `setup_env.pyw`. Une fois terminé, l'environnement virtuel python avec les dépendances sont instalés.
+     - Lancez `archiviste.pyw` pour lancer l'application.
 
 ### Note sur les alertes antivirus (Windows)
 Sous Windows, Microsoft Defender peut signaler `Archiviste.exe` comme un malware (faux positif dû à PyInstaller). Pour l’autoriser :
