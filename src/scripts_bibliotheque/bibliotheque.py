@@ -32,6 +32,7 @@ class LibraryManager:
         self.all_files = []
         self.load_initial_data()
         style = ttk.Style()
+        style.theme_use("alt")
         style.configure("Add.TButton", background="#90EE90", foreground="black")
         style.configure("Modify.TButton", background="#FFFFE0", foreground="black")
         style.configure("Clear.TButton", background="#ADD8E6", foreground="black")
