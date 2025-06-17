@@ -8,81 +8,88 @@ import zipfile
 import sys
 
 class DBManager:
+
     def __init__(self, parent, conn_audit, db_path_audit, conn_compteurs, db_path_compteurs, conn_tasks, db_path_tasks, conn_library, db_path_library, update_callback=None):
-        self.parent = parent
-        self.conn_audit = conn_audit
-        self.db_path_audit = db_path_audit
-        self.conn_compteurs = conn_compteurs
-        self.db_path_compteurs = db_path_compteurs
-        self.conn_tasks = conn_tasks
-        self.db_path_tasks = db_path_tasks
-        self.conn_library = conn_library
-        self.db_path_library = db_path_library
-        self.update_callback = update_callback
+            self.parent = parent
+            self.conn_audit = conn_audit
+            self.db_path_audit = db_path_audit
+            self.conn_compteurs = conn_compteurs
+            self.db_path_compteurs = db_path_compteurs
+            self.conn_tasks = conn_tasks
+            self.db_path_tasks = db_path_tasks
+            self.conn_library = conn_library
+            self.db_path_library = db_path_library
+            self.update_callback = update_callback
 
-        # Définir le chemin de base comme le dossier de l'exécutable
-        self.project_root = os.path.dirname(os.path.abspath(sys.argv[0]))
+            # Définir le chemin de base comme le dossier de l'exécutable
+            self.project_root = os.path.dirname(os.path.abspath(sys.argv[0]))
+            
+            # Définir les chemins relatifs pour les dossiers et fichiers
+            self.config_file = os.path.join(self.project_root, "config.ini")
+            self.nomenclatures_file = os.path.join(self.project_root, "nomenclatures.json")
+            self.sites_file = os.path.join(self.project_root, "sites.json")
+            self.last_export_file = os.path.join(self.project_root, "last_export.txt")
+
+            # Frame principale
+            self.main_frame = ttk.LabelFrame(self.parent, text="Gestion des Bases de Données")
+            self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+            # Section pour Audit
+            ttk.Label(self.main_frame, text="Base de données Audit", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
+            
+            # Ligne Corrigée : On vérifie si db_path_audit n'est pas None
+            audit_path_text = f"Emplacement actuel : {os.path.dirname(self.db_path_audit)}" if self.db_path_audit else "Emplacement actuel : Désactivé"
+            self.current_path_label_audit = ttk.Label(self.main_frame, text=audit_path_text)
+            self.current_path_label_audit.pack(anchor="w", pady=2)
+
+            ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
+
+            # Section pour Compteurs
+            ttk.Label(self.main_frame, text="Base de données Compteurs", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
+            compteurs_path_text = f"Emplacement actuel : {os.path.dirname(self.db_path_compteurs)}" if self.db_path_compteurs else "Emplacement actuel : Désactivé"
+            self.current_path_label_compteurs = ttk.Label(self.main_frame, text=compteurs_path_text)
+            self.current_path_label_compteurs.pack(anchor="w", pady=2)
+
+            ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
+
+            # Section pour Tâches
+            ttk.Label(self.main_frame, text="Base de données Tâches", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
+            tasks_path_text = f"Emplacement actuel : {os.path.dirname(self.db_path_tasks)}" if self.db_path_tasks else "Emplacement actuel : Non défini"
+            self.current_path_label_tasks = ttk.Label(self.main_frame, text=tasks_path_text)
+            self.current_path_label_tasks.pack(anchor="w", pady=2)
+
+            ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
+
+            # Section pour Bibliothèque
+            ttk.Label(self.main_frame, text="Base de données Bibliothèque", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
+            library_path_text = f"Emplacement actuel : {os.path.dirname(self.db_path_library)}" if self.db_path_library else "Emplacement actuel : Non défini"
+            self.current_path_label_library = ttk.Label(self.main_frame, text=library_path_text)
+            self.current_path_label_library.pack(anchor="w", pady=2)
+
+            ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
+
+            # Afficher la date du dernier export
+            last_export_date = self.get_last_export_date()
+            if last_export_date:
+                last_export_label = ttk.Label(self.main_frame, text=f"Dernier export global : {last_export_date.strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                last_export_label = ttk.Label(self.main_frame, text="Aucun export global effectué.")
+            last_export_label.pack(anchor="w", pady=5)
+
+            # Bouton pour exporter tout en .zip
+            ttk.Button(self.main_frame, text="Exporter Tout (.zip)", command=self.export_all_to_zip).pack(pady=5)
+
+            ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
+
+            # Bouton pour réinitialiser les préférences "Ne plus demander"
+            ttk.Button(self.main_frame, text="Réinitialiser 'Ne plus demander'", command=self.reset_skip_preferences).pack(pady=10)
+
+            # Vérifier si un rappel d'export est nécessaire
+            self.check_export_reminder()
+
+            # Mettre à jour la structure de la table parameters pour ajouter les colonnes manquantes
+            self.migrate_parameters_table()
         
-        # Définir les chemins relatifs pour les dossiers et fichiers
-        self.config_file = os.path.join(self.project_root, "config.ini")
-        self.nomenclatures_file = os.path.join(self.project_root, "nomenclatures.json")
-        self.sites_file = os.path.join(self.project_root, "sites.json")
-        self.last_export_file = os.path.join(self.project_root, "last_export.txt")
-
-        # Frame principale
-        self.main_frame = ttk.LabelFrame(self.parent, text="Gestion des Bases de Données")
-        self.main_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-        # Section pour Audit
-        ttk.Label(self.main_frame, text="Base de données Audit", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
-        self.current_path_label_audit = ttk.Label(self.main_frame, text=f"Emplacement actuel : {os.path.dirname(self.db_path_audit)}")
-        self.current_path_label_audit.pack(anchor="w", pady=2)
-
-        ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
-
-        # Section pour Compteurs
-        ttk.Label(self.main_frame, text="Base de données Compteurs", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
-        self.current_path_label_compteurs = ttk.Label(self.main_frame, text=f"Emplacement actuel : {os.path.dirname(self.db_path_compteurs)}")
-        self.current_path_label_compteurs.pack(anchor="w", pady=2)
-
-        ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
-
-        # Section pour Tâches
-        ttk.Label(self.main_frame, text="Base de données Tâches", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
-        self.current_path_label_tasks = ttk.Label(self.main_frame, text=f"Emplacement actuel : {os.path.dirname(self.db_path_tasks) if self.db_path_tasks else 'Non défini'}")
-        self.current_path_label_tasks.pack(anchor="w", pady=2)
-
-        ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
-
-        # Section pour Bibliothèque
-        ttk.Label(self.main_frame, text="Base de données Bibliothèque", font=("Arial", 12, "bold")).pack(anchor="w", pady=5)
-        self.current_path_label_library = ttk.Label(self.main_frame, text=f"Emplacement actuel : {os.path.dirname(self.db_path_library) if self.db_path_library else 'Non défini'}")
-        self.current_path_label_library.pack(anchor="w", pady=2)
-
-        ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
-
-        # Afficher la date du dernier export
-        last_export_date = self.get_last_export_date()
-        if last_export_date:
-            last_export_label = ttk.Label(self.main_frame, text=f"Dernier export global : {last_export_date.strftime('%Y-%m-%d %H:%M:%S')}")
-        else:
-            last_export_label = ttk.Label(self.main_frame, text="Aucun export global effectué.")
-        last_export_label.pack(anchor="w", pady=5)
-
-        # Bouton pour exporter tout en .zip
-        ttk.Button(self.main_frame, text="Exporter Tout (.zip)", command=self.export_all_to_zip).pack(pady=5)
-
-        ttk.Separator(self.main_frame, orient="horizontal").pack(fill="x", pady=10)
-
-        # Bouton pour réinitialiser les préférences "Ne plus demander"
-        ttk.Button(self.main_frame, text="Réinitialiser 'Ne plus demander'", command=self.reset_skip_preferences).pack(pady=10)
-
-        # Vérifier si un rappel d'export est nécessaire
-        self.check_export_reminder()
-
-        # Mettre à jour la structure de la table parameters pour ajouter les colonnes manquantes
-        self.migrate_parameters_table()
-
     def migrate_parameters_table(self):
         """Ajoute les colonnes manquantes à la table parameters si elles n'existent pas."""
         if self.conn_audit:
