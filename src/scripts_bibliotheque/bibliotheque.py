@@ -183,31 +183,49 @@ class LibraryManager:
             messagebox.showerror("Erreur", f"Échec de l'initialisation de la base de données : {str(e)}")
 
     def load_initial_data(self):
-        try:
-            self.cursor.execute("SELECT DISTINCT year, category, archives, project, notes FROM library WHERE file_path != '' OR title = '[Dossier]'")
-            raw_folders = self.cursor.fetchall()
-            self.all_folders = []
-            for row in raw_folders:
-                year = str(row[0]).strip() if row[0] is not None else ""
-                category = str(row[1]).strip() if row[1] is not None else ""
-                archives = str(row[2]).strip() if row[2] is not None else ""
-                project = str(row[3]).strip() if row[3] is not None else ""
-                notes = str(row[4]).strip() if row[4] is not None else ""
-                self.all_folders.append((year, category, archives, project, notes))
+            try:
+                # Étape 1: Obtenir les dossiers uniques en se basant sur leur structure de chemin
+                self.cursor.execute("SELECT DISTINCT year, category, archives, project FROM library WHERE file_path != '' OR title = '[Dossier]'")
+                distinct_folders = self.cursor.fetchall()
 
-            self.cursor.execute("SELECT id, title, year, category, archives, project FROM library WHERE file_path != ''")
-            raw_files = self.cursor.fetchall()
-            self.all_files = []
-            for row in raw_files:
-                file_id = row[0]
-                title = str(row[1]).strip() if row[1] is not None else ""
-                year = str(row[2]).strip() if row[2] is not None else ""
-                category = str(row[3]).strip() if row[3] is not None else ""
-                archives = str(row[4]).strip() if row[4] is not None else ""
-                project = str(row[5]).strip() if row[5] is not None else ""
-                self.all_files.append((file_id, title, year, category, archives, project))
-        except sqlite3.Error as e:
-            messagebox.showerror("Erreur", f"Échec du chargement des données initiales : {str(e)}")
+                self.all_folders = []
+                # Étape 2: Pour chaque dossier unique, trouver la note correspondante
+                for folder_row in distinct_folders:
+                    year, category, archives, project = folder_row
+                    
+                    # Normalisation des valeurs pour la recherche
+                    year_str = str(year).strip() if year is not None else ""
+                    category_str = str(category).strip() if category is not None else ""
+                    archives_str = str(archives).strip() if archives is not None else ""
+                    project_str = str(project).strip() if project is not None else ""
+
+                    # Recherche de la note, en donnant la priorité à l'entrée '[Dossier]' ou à la plus récente
+                    self.cursor.execute("""
+                        SELECT notes FROM library 
+                        WHERE year = ? AND category = ? AND (archives = ? OR (archives IS NULL AND ? = '')) AND project = ?
+                        ORDER BY CASE WHEN title = '[Dossier]' THEN 0 ELSE 1 END, id DESC
+                        LIMIT 1
+                    """, (year_str, category_str, archives_str, archives_str, project_str))
+                    
+                    note_row = self.cursor.fetchone()
+                    notes_str = str(note_row[0]).strip() if note_row and note_row[0] is not None else ""
+
+                    self.all_folders.append((year_str, category_str, archives_str, project_str, notes_str))
+
+                # Le reste de la fonction (chargement des fichiers) reste inchangé
+                self.cursor.execute("SELECT id, title, year, category, archives, project FROM library WHERE file_path != ''")
+                raw_files = self.cursor.fetchall()
+                self.all_files = []
+                for row in raw_files:
+                    file_id = row[0]
+                    title = str(row[1]).strip() if row[1] is not None else ""
+                    year = str(row[2]).strip() if row[2] is not None else ""
+                    category = str(row[3]).strip() if row[3] is not None else ""
+                    archives = str(row[4]).strip() if row[4] is not None else ""
+                    project = str(row[5]).strip() if row[5] is not None else ""
+                    self.all_files.append((file_id, title, year, category, archives, project))
+            except sqlite3.Error as e:
+                messagebox.showerror("Erreur", f"Échec du chargement des données initiales : {str(e)}")
 
     def init_nomenclatures_file(self):
         try:
@@ -1183,18 +1201,35 @@ class LibraryManager:
         except Exception as e:
             messagebox.showerror("Erreur", f"Échec du vidage du formulaire : {str(e)}")
 
-    def sort_column(self, col, reverse):
-        try:
-            if col not in self.sort_direction:
-                raise ValueError(f"Colonne invalide pour le tri : {col}")
-            self.sort_column_name = col
-            self.sort_reverse = reverse
-            self.sort_direction[col] = not reverse
-            self.refresh_folder_list()
-            self.folder_tree.heading(col, command=lambda: self.sort_column(col, not reverse))
-        except Exception as e:
-            messagebox.showerror("Erreur", f"Échec du tri des colonnes : {str(e)}")
 
+    def sort_column(self, col, reverse):
+            try:
+                # Dictionnaire pour mapper les clés de tri (minuscules) aux vrais identifiants de colonne (Majuscule)
+                column_id_map = {
+                    "year": "Year",
+                    "category": "Category",
+                    "archives": "Archives",
+                    "project": "Project",
+                    "notes": "Notes"
+                }
+
+                if col not in self.sort_direction:
+                    raise ValueError(f"Colonne invalide pour le tri : {col}")
+                
+                self.sort_column_name = col
+                self.sort_reverse = reverse
+                self.sort_direction[col] = not reverse
+                
+                self.refresh_folder_list()
+                
+                # On récupère le bon identifiant de colonne (ex: "Project")
+                column_id = column_id_map.get(col)
+                if column_id:
+                    # On utilise l'identifiant correct pour mettre à jour l'en-tête
+                    self.folder_tree.heading(column_id, command=lambda: self.sort_column(col, not reverse))
+
+            except Exception as e:
+                messagebox.showerror("Erreur", f"Échec du tri des colonnes : {str(e)}")
     def refresh_folder_list(self):
         try:
             selected = self.folder_tree.selection()
