@@ -12,6 +12,21 @@ import shutil
 # Ajouter le répertoire racine du projet au sys.path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# --- Importation des modules ---
+# Tâches et Bibliothèque
+from scripts_bibliotheque.archiviste_taches import TaskManager
+from scripts_bibliotheque.bibliotheque import LibraryManager
+# Recherche Globale
+from global_search import GlobalSearch
+# Compteurs
+from scripts_compteurs.db_designer_compteur import DBDesigner as CompteursDBDesigner
+from scripts_compteurs.meter_readings_compteur import MeterReadings as CompteursMeterReadings
+from scripts_compteurs.meter_reports_compteur import MeterReports as CompteursMeterReports
+from scripts_compteurs.meter_graphs_compteur import MeterGraphs as CompteursMeterGraphs
+# Gestion DB
+from scripts_releves.db_manager import DBManager
+
+
 # Gérer les chemins pour PyInstaller
 def resource_path(relative_path):
     """Retourne le chemin absolu pour les fichiers inclus dans l'exécutable PyInstaller."""
@@ -61,22 +76,6 @@ def check_dependencies():
 
 check_dependencies()
 
-# Imports des modules existants
-# from scripts_releves.db_designer_releves import DBDesigner as AuditDBDesigner
-# from scripts_releves.meter_readings_releves import MeterReadings as AuditMeterReadings
-# from scripts_releves.meter_reports_releves import MeterReports as AuditMeterReports
-# from scripts_releves.meter_graphs_releves import MeterGraphs as AuditMeterGraphs
-
-from scripts_compteurs.db_designer_compteur import DBDesigner as CompteursDBDesigner
-from scripts_compteurs.meter_readings_compteur import MeterReadings as CompteursMeterReadings
-from scripts_compteurs.meter_reports_compteur import MeterReports as CompteursMeterReports
-from scripts_compteurs.meter_graphs_compteur import MeterGraphs as CompteursMeterGraphs
-
-from scripts_releves.db_manager import DBManager
-
-# Imports des nouveaux modules pour tâches et bibliothèque
-from scripts_bibliotheque.archiviste_taches import TaskManager
-from scripts_bibliotheque.bibliotheque import LibraryManager
 
 def show_dependencies_ok_window():
     config_path = os.path.join(DATA_DIR, "config.ini")
@@ -158,182 +157,85 @@ class ArchivisteApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Archiviste")
+        self.root.geometry("1600x900")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         # Créer le dossier db si nécessaire
         os.makedirs(DB_DIR, exist_ok=True)
 
-        # Chemins fixes pour les bases de données
-        self.db_path_audit = os.path.join(DB_DIR, "audit.db")
+        # --- Chemins et Connexions aux DBs ---
+        # Note: 'audit.db' est commenté car les modules associés le sont aussi dans le code fourni
+        # self.db_path_audit = os.path.join(DB_DIR, "audit.db") 
         self.db_path_compteurs = os.path.join(DB_DIR, "meters.db")
         self.db_path_tasks = os.path.join(DB_DIR, "tasks.db")
         self.db_path_library = os.path.join(DB_DIR, "library.db")
 
-        # Initialisation des connexions
-#         self.conn_audit = sqlite3.connect(self.db_path_audit, check_same_thread=False)
-#         self.conn_audit.isolation_level = None
-#         self.create_tables_audit(self.conn_audit.cursor())
-#         self.conn_audit.commit()
-
+        # self.conn_audit = sqlite3.connect(self.db_path_audit, check_same_thread=False)
         self.conn_compteurs = sqlite3.connect(self.db_path_compteurs, check_same_thread=False)
-        self.conn_compteurs.isolation_level = None
-        self.create_tables_compteurs(self.conn_compteurs.cursor())
-        self.conn_compteurs.commit()
-
         self.conn_tasks = sqlite3.connect(self.db_path_tasks, check_same_thread=False)
-        self.conn_tasks.isolation_level = None
-        self.create_tables_tasks(self.conn_tasks.cursor())
-        self.conn_tasks.commit()
-
         self.conn_library = sqlite3.connect(self.db_path_library, check_same_thread=False)
-        self.conn_library.isolation_level = None
+
+        # Création des tables si elles n'existent pas
+        self.create_tables_compteurs(self.conn_compteurs.cursor())
+        self.create_tables_tasks(self.conn_tasks.cursor())
         self.create_tables_library(self.conn_library.cursor())
+        self.conn_compteurs.commit()
+        self.conn_tasks.commit()
         self.conn_library.commit()
 
-        # Créer le Notebook personnalisé
+        # --- Création du Notebook personnalisé ---
         self.notebook = CustomNotebook(self.root)
 
-        # Création des onglets dans l'ordre : Tâches, Bibliothèque, Sauvegardes, Audit, Compteurs
-        # Tâches
+        # --- Création des onglets (frames) ---
+        self.tab_global_search = tk.Frame(self.notebook.content_frame)
         self.tab_tasks = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab_tasks, text="Tâches", bg_color="#98FB98", fg_color="black")
-        
-        # Bibliothèque
         self.tab_library = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab_library, text="Bibliothèque", bg_color="#FFB6C1", fg_color="black")
-        
-        # Sauvegardes
         self.tab_db_manager = tk.Frame(self.notebook.content_frame)
+        self.tab_compteurs_readings = tk.Frame(self.notebook.content_frame)
+        self.tab_compteurs_reports = tk.Frame(self.notebook.content_frame)
+        self.tab_compteurs_graphs = tk.Frame(self.notebook.content_frame)
+        self.tab_compteurs_design = tk.Frame(self.notebook.content_frame)
+
+        # --- Ajout des onglets au Notebook ---
+        # NOTE: L'ordre ici définit l'ordre d'affichage des boutons
+        self.notebook.add(self.tab_global_search, text="Recherche", bg_color="#FFA500", fg_color="black")
+        self.notebook.add(self.tab_tasks, text="Tâches", bg_color="#98FB98", fg_color="black")
+        self.notebook.add(self.tab_library, text="Bibliothèque", bg_color="#FFB6C1", fg_color="black")
+        self.notebook.add(self.tab_compteurs_readings, text="Compteurs", bg_color="#FFFFE0", fg_color="black")
+        self.notebook.add(self.tab_compteurs_reports, text="Synthèse compteurs", bg_color="#FFFFE0", fg_color="black")
+        self.notebook.add(self.tab_compteurs_graphs, text="Graphique compteurs", bg_color="#FFFFE0", fg_color="black")
+        self.notebook.add(self.tab_compteurs_design, text="Gestion compteurs", bg_color="#FFD700", fg_color="black")
         self.notebook.add(self.tab_db_manager, text="Sauvegardes", bg_color="#000000", fg_color="white")
 
-        # Audit
-#         self.tab2_audit = tk.Frame(self.notebook.content_frame)
-#         self.notebook.add(self.tab2_audit, text="Relevés techniques", bg_color="#ADD8E6", fg_color="black")
-#         
-#         self.tab3_audit = tk.Frame(self.notebook.content_frame)
-#         self.notebook.add(self.tab3_audit, text="Synthèse relevés", bg_color="#ADD8E6", fg_color="black")
-#         
-#         self.tab4_audit = tk.Frame(self.notebook.content_frame)
-#         self.notebook.add(self.tab4_audit, text="Graphique relevés", bg_color="#ADD8E6", fg_color="black")
-#         
-#         self.tab1_audit = tk.Frame(self.notebook.content_frame)
-#         self.notebook.add(self.tab1_audit, text="Gestion relevés", bg_color="#4682B4", fg_color="white")
+        # --- Initialisation des modules dans leurs onglets respectifs ---
         
-        # Compteurs
-        self.tab2_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab2_compteurs, text="Compteurs", bg_color="#FFFFE0", fg_color="black")
-        
-        self.tab3_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab3_compteurs, text="Synthèse compteurs", bg_color="#FFFFE0", fg_color="black")
-        
-        self.tab4_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab4_compteurs, text="Graphique compteurs", bg_color="#FFFFE0", fg_color="black")
-        
-        self.tab1_compteurs = tk.Frame(self.notebook.content_frame)
-        self.notebook.add(self.tab1_compteurs, text="Gestion compteurs", bg_color="#FFD700", fg_color="black")
-
-        # Initialisation des modules
-        # Audit
-#         self.db_designer_audit = AuditDBDesigner(self.tab1_audit, self.conn_audit, self.conn_library)
-#         print("Instantiating AuditMeterReadings...")
-#         self.meter_readings_audit = AuditMeterReadings(self.tab2_audit, self.conn_audit, self.conn_library)
-#         print("AuditMeterReadings instantiated successfully.")
-#         self.meter_graphs_audit = AuditMeterGraphs(self.tab4_audit)
-#         self.meter_reports_audit = AuditMeterReports(self.tab3_audit, self.conn_audit, self.meter_graphs_audit)
-
-        # Compteurs
-        self.db_designer_compteurs = CompteursDBDesigner(self.tab1_compteurs, self.conn_compteurs)
-        print("Instantiating CompteursMeterReadings...")
-        import scripts_compteurs.meter_readings_compteur
-        print(f"Using meter_readings_compteur.py from: {scripts_compteurs.meter_readings_compteur.__file__}")
-        self.meter_readings_compteurs = CompteursMeterReadings(self.tab2_compteurs, self.conn_compteurs)
-        print("CompteursMeterReadings instantiated successfully.")
-        self.meter_graphs_compteurs = CompteursMeterGraphs(self.tab4_compteurs)
-        self.meter_reports_compteurs = CompteursMeterReports(self.tab3_compteurs, self.conn_compteurs, self.meter_graphs_compteurs)
-
-        # Bibliothèque
+        # Bibliothèque (initialisée d'abord car nécessaire pour Tâches et Recherche)
         self.library_manager = LibraryManager(self.tab_library, self.conn_library)
-
+        
+        # Recherche Globale
+        self.global_search_manager = GlobalSearch(self.tab_global_search, self.conn_tasks, self.conn_library, self.library_manager)
+        
         # Tâches
         self.task_manager = TaskManager(self.tab_tasks, self.conn_tasks, self.conn_library, self.library_manager)
 
+        # Compteurs
+        self.db_designer_compteurs = CompteursDBDesigner(self.tab_compteurs_design, self.conn_compteurs)
+        self.meter_readings_compteurs = CompteursMeterReadings(self.tab_compteurs_readings, self.conn_compteurs)
+        self.meter_graphs_compteurs = CompteursMeterGraphs(self.tab_compteurs_graphs)
+        self.meter_reports_compteurs = CompteursMeterReports(self.tab_compteurs_reports, self.conn_compteurs, self.meter_graphs_compteurs)
+        
         # Gestionnaire de bases de données
         self.db_manager = DBManager(
             self.tab_db_manager,
-            None, None,
-            #self.conn_audit, self.db_path_audit,
+            None, None, # conn_audit et db_path_audit sont désactivés
             self.conn_compteurs, self.db_path_compteurs,
             self.conn_tasks, self.db_path_tasks,
             self.conn_library, self.db_path_library,
             self.update_connection_after_import
         )
 
-        # Mettre à jour les connexions
+        # Mettre à jour les connexions si nécessaire
         self.update_connection_after_import(None, self.conn_compteurs, self.conn_tasks, self.conn_library)
-
-        # Charger les listes déroulantes
-#         self.meter_graphs_audit.update_meters_to_combobox()
-
-#     def create_tables_audit(self, cursor):
-#         cursor.execute('''CREATE TABLE IF NOT EXISTS categories (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             name TEXT NOT NULL,
-#             parent_id INTEGER,
-#             x_pos REAL DEFAULT 20,
-#             y_pos REAL DEFAULT 20,
-#             width REAL DEFAULT 150,
-#             height REAL DEFAULT 50,
-#             FOREIGN KEY (parent_id) REFERENCES categories(id)
-#         )''')
-#         cursor.execute('''CREATE TABLE IF NOT EXISTS meters (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             name TEXT NOT NULL,
-#             note TEXT,
-#             category_id INTEGER,
-#             x_pos REAL DEFAULT 20,
-#             y_pos REAL DEFAULT 60,
-#             FOREIGN KEY (category_id) REFERENCES categories(id)
-#         )''')
-#         cursor.execute('''CREATE TABLE IF NOT EXISTS parameters (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             meter_id INTEGER,
-#             name TEXT NOT NULL,
-#             cible REAL,
-#             max_value REAL,
-#             unit TEXT,
-#             FOREIGN KEY (meter_id) REFERENCES meters(id)
-#         )''')
-#         cursor.execute('''CREATE TABLE IF NOT EXISTS readings (
-#             id INTEGER PRIMARY KEY AUTOINCREMENT,
-#             meter_id INTEGER,
-#             parameter_id INTEGER,
-#             date TEXT NOT NULL,
-#             value REAL NOT NULL,
-#             note TEXT,
-#             library_file_id INTEGER,
-#             FOREIGN KEY (meter_id) REFERENCES meters(id),
-#             FOREIGN KEY (parameter_id) REFERENCES parameters(id)
-#         )''')
-#         cursor.execute("PRAGMA table_info(readings)")
-#         columns = [info[1] for info in cursor.fetchall()]
-#         if 'attachment_path' in columns:
-#             cursor.execute('''CREATE TABLE readings_temp (
-#                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-#                 meter_id INTEGER,
-#                 parameter_id INTEGER,
-#                 date TEXT NOT NULL,
-#                 value REAL NOT NULL,
-#                 note TEXT,
-#                 library_file_id INTEGER,
-#                 FOREIGN KEY (meter_id) REFERENCES meters(id),
-#                 FOREIGN KEY (parameter_id) REFERENCES parameters(id)
-#             )''')
-#             cursor.execute('''INSERT INTO readings_temp (id, meter_id, parameter_id, date, value, note)
-#                              SELECT id, meter_id, parameter_id, date, value, note FROM readings''')
-#             cursor.execute('DROP TABLE readings')
-#             cursor.execute('ALTER TABLE readings_temp RENAME TO readings')
-#         elif 'library_file_id' not in columns:
-#             cursor.execute('ALTER TABLE readings ADD COLUMN library_file_id INTEGER')
 
     def create_tables_compteurs(self, cursor):
         cursor.execute('''CREATE TABLE IF NOT EXISTS categories (
@@ -384,6 +286,14 @@ class ArchivisteApp:
             status TEXT DEFAULT 'En cours',
             recurrence TEXT DEFAULT 'Aucune'
         )''')
+        # Ajout de la table des sous-tâches si elle n'est pas déjà dans le module
+        cursor.execute('''CREATE TABLE IF NOT EXISTS subtasks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            task_id INTEGER,
+            title TEXT NOT NULL,
+            status TEXT DEFAULT 'En cours',
+            FOREIGN KEY (task_id) REFERENCES tasks(id)
+        )''')
 
     def create_tables_library(self, cursor):
         cursor.execute('''CREATE TABLE IF NOT EXISTS library (
@@ -411,7 +321,6 @@ class ArchivisteApp:
         cursor.execute('''CREATE TABLE IF NOT EXISTS reading_file_link (
             reading_id INTEGER,
             file_id INTEGER,
-            FOREIGN KEY (reading_id) REFERENCES readings(id),
             FOREIGN KEY (file_id) REFERENCES library(id),
             PRIMARY KEY (reading_id, file_id)
         )''')
@@ -422,52 +331,52 @@ class ArchivisteApp:
             cursor.execute("ALTER TABLE library ADD COLUMN archives TEXT")
 
     def update_connection_after_import(self, conn_audit, conn_compteurs, conn_tasks, conn_library):
-        self.conn_audit = conn_audit
+        # Cette méthode est appelée par DBManager, on peut l'utiliser pour s'assurer
+        # que toutes les instances ont les bonnes connexions si une DB est importée.
+        # Pour l'instant, on se contente de réassigner les connexions existantes.
         self.conn_compteurs = conn_compteurs
         self.conn_tasks = conn_tasks
         self.conn_library = conn_library
-        # Mise à jour des modules Audit
-#         self.db_designer_audit.conn = self.conn_audit
-#         self.db_designer_audit.conn_library = self.conn_library
-#         self.db_designer_audit.cursor = self.conn_audit.cursor()
-#         self.db_designer_audit.cursor_library = self.conn_library.cursor()
-#         self.db_designer_audit.update_ui()
-#         self.meter_readings_audit.conn = self.conn_audit
-#         self.meter_readings_audit.conn_library = self.conn_library
-#         self.meter_readings_audit.cursor = self.conn_audit.cursor()
-#         self.meter_readings_audit.cursor_library = self.conn_library.cursor()
-#         self.meter_readings_audit.load_meters_to_tree()
-#         self.meter_reports_audit.conn = self.conn_audit
-#         self.meter_reports_audit.cursor = self.conn_audit.cursor()
-#         self.meter_graphs_audit.conn = self.conn_audit
-#         self.meter_graphs_audit.cursor = self.conn_audit.cursor()
+
         # Mise à jour des modules Compteurs
         self.db_designer_compteurs.conn = self.conn_compteurs
         self.db_designer_compteurs.cursor = self.conn_compteurs.cursor()
         self.db_designer_compteurs.update_ui()
+        
         self.meter_readings_compteurs.conn = self.conn_compteurs
         self.meter_readings_compteurs.cursor = self.conn_compteurs.cursor()
         self.meter_readings_compteurs.load_meters_to_tree()
+        
         self.meter_reports_compteurs.conn = self.conn_compteurs
         self.meter_reports_compteurs.cursor = self.conn_compteurs.cursor()
-        self.meter_graphs_compteurs.conn = self.conn_compteurs
-        self.meter_graphs_compteurs.cursor = self.conn_compteurs.cursor()
+        
+        # self.meter_graphs_compteurs.conn = self.conn_compteurs
+        # self.meter_graphs_compteurs.cursor = self.conn_compteurs.cursor()
+
         # Mise à jour des modules Tâches
         self.task_manager.conn = self.conn_tasks
         self.task_manager.conn_library = self.conn_library
         self.task_manager.cursor = self.conn_tasks.cursor()
         self.task_manager.cursor_library = self.conn_library.cursor()
         self.task_manager.refresh_task_list()
+        
         # Mise à jour des modules Bibliothèque
         self.library_manager.conn = self.conn_library
         self.library_manager.cursor = self.conn_library.cursor()
         self.library_manager.refresh_folder_list()
+        
+        # Mise à jour du module de Recherche
+        self.global_search_manager.conn_tasks = self.conn_tasks
+        self.global_search_manager.conn_library = self.conn_library
+        self.global_search_manager.cursor_tasks = self.conn_tasks.cursor()
+        self.global_search_manager.cursor_library = self.conn_library.cursor()
+
 
     def on_closing(self):
         if messagebox.askyesno("Quitter", "Voulez-vous vraiment quitter ?"):
-#             if hasattr(self, 'conn_audit'):
-#                 self.conn_audit.close()
-#                 print("Connexion SQLite (Audit) fermée.")
+            # if hasattr(self, 'conn_audit'):
+            #     self.conn_audit.close()
+            #     print("Connexion SQLite (Audit) fermée.")
             if hasattr(self, 'conn_compteurs'):
                 self.conn_compteurs.close()
                 print("Connexion SQLite (Compteurs) fermée.")
