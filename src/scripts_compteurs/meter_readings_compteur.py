@@ -370,31 +370,51 @@ class MeterReadings:
         self.reading_note_entry.config(state="normal")
 
     def save_reading(self):
-        month = self.reading_month_var.get()
-        year = self.reading_year_var.get()
-        if not month or not year:
-            messagebox.showwarning("Erreur", "Veuillez remplir la date.")
-            return
-        if not self.current_meter_id:
-            messagebox.showwarning("Erreur", "Veuillez sélectionner un compteur.")
-            return
-        index = self.reading_index_var.get().replace(" ", "")
-        if not index.isdigit():
-            messagebox.showwarning("Erreur", "L'index doit être un nombre entier.")
-            return
-        index = int(index)
-        date = f"{year}-{month}"
-        note = self.reading_note_var.get()
-        if self.current_reading_id:
-            self.cursor.execute("UPDATE readings SET meter_id=?, date=?, meter_index=?, note=? WHERE id=?", 
-                               (self.current_meter_id, date, index, note, self.current_reading_id))
-        else:
-            self.cursor.execute("INSERT INTO readings (meter_id, date, meter_index, note) VALUES (?, ?, ?, ?)", 
-                               (self.current_meter_id, date, index, note))
-            self.current_reading_id = self.cursor.lastrowid
-        self.update_all_consumptions(self.current_meter_id)
-        self.load_readings()
-        self.clear_reading_form()
+            month = self.reading_month_var.get()
+            year = self.reading_year_var.get()
+            if not month or not year:
+                messagebox.showwarning("Erreur", "Veuillez remplir la date.")
+                return
+            if not self.current_meter_id:
+                messagebox.showwarning("Erreur", "Veuillez sélectionner un compteur.")
+                return
+            index = self.reading_index_var.get().replace(" ", "")
+            if not index.isdigit():
+                messagebox.showwarning("Erreur", "L'index doit être un nombre entier.")
+                return
+            index = int(index)
+            date = f"{year}-{month}"
+            note = self.reading_note_var.get()
+
+            try:
+                if self.current_reading_id:
+                    # C'est une modification
+                    self.cursor.execute("UPDATE readings SET meter_id=?, date=?, meter_index=?, note=? WHERE id=?",
+                                       (self.current_meter_id, date, index, note, self.current_reading_id))
+                else:
+                    # C'est un nouvel ajout
+                    self.cursor.execute("INSERT INTO readings (meter_id, date, meter_index, note) VALUES (?, ?, ?, ?)",
+                                       (self.current_meter_id, date, index, note))
+                    self.current_reading_id = self.cursor.lastrowid
+               
+                # ---> LIGNE ESSENTIELLE AJOUTÉE <---
+                # On demande à la base de données de sauvegarder les changements de manière permanente
+                self.conn.commit()
+               
+                # On met à jour les calculs de consommation
+                self.update_all_consumptions(self.current_meter_id)
+               
+                # ---> LIGNE UTILE AJOUTÉE <---
+                # On prévient l'utilisateur que tout s'est bien passé
+                messagebox.showinfo("Succès", "Relevé enregistré avec succès.")
+
+            except Exception as e:
+                messagebox.showerror("Erreur d'enregistrement", f"Une erreur est survenue : {e}")
+
+            finally:
+                # Quoi qu'il arrive, on rafraîchit la liste et on vide le formulaire
+                self.load_readings()
+                self.clear_reading_form()
 
     def clear_reading_form(self):
         self.current_reading_id = None
